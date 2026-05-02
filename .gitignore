@@ -1,0 +1,38 @@
+# ESP-IDF build output
+build/
+managed_components/
+dependencies.lock
+sdkconfig.old
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Test and coverage artifacts
+coverage/html/
+coverage/*.info
+coverage/*.gcda
+coverage/*.gcno
+coverage/*.gcov
+pi_test_bench/reports/*
+!pi_test_bench/reports/.gitkeep
+static_analysis/*.txt
+!static_analysis/.gitkeep
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
