@@ -1,0 +1,5 @@
+# ESP-IDF local build artifacts
+build/
+managed_components/
+dependencies.lock
+sdkconfig.old

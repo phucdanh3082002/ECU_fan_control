@@ -1,0 +1,2 @@
+# ESP32 console baud rate used by idf.py monitor and the UART test bench baseline.
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
