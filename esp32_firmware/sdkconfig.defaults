@@ -1,2 +1,6 @@
 # ESP32 console baud rate used by idf.py monitor and the UART test bench baseline.
 CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# ESP32 DevKit V1 board detected on this machine has 4 MB flash.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
