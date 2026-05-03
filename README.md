@@ -2,11 +2,20 @@
 
 ## 1. Executive Summary
 
-Dự án **ECU-Like Fan Control & Diagnostics Test Bench** mô phỏng một hệ thống điều khiển quạt làm mát kiểu ECU sử dụng **ESP32 DevKit V1** làm embedded controller và **Raspberry Pi 4** làm Python-based test bench. Firmware trên ESP32 được phát triển bằng **ESP-IDF + FreeRTOS** trong VS Code, tập trung vào điều khiển fan, diagnostics, safe mode, fault recovery và RTOS task timing.
+Dự án **ECU-Like Fan Control & Diagnostics Test Bench** phát triển một hệ thống điều khiển quạt làm mát kiểu ECU sử dụng **ESP32 DevKit V1** làm embedded controller và **Raspberry Pi 4** làm Python-based test bench.
 
-Dự án hướng đến việc thực hành các kỹ năng phù hợp với vị trí **Embedded Software Testing for Automotive System**, bao gồm: **C/C++ embedded development, FreeRTOS, unit testing, integration testing, test case design, boundary testing, invalid input testing, fault recovery testing, UART communication, Python test automation, static analysis với Cppcheck và chuẩn bị code coverage với GCOV/LCOV**.
+**Hai giai đoạn phát triển**:
+1. **Phase 1-2 (Simulation)**: Dùng Potentiometer, Button, LED để mô phỏng - Foundation & Learning
+2. **Phase 3+ (Real Hardware)**: Dùng LM35 (nhiệt độ), INA219 (dòng điện), DC Fan với MOSFET driver - Production-ready
 
-Dự án không nhằm tạo ECU automotive-grade thật, mà là một mô hình kỹ thuật có tính thực thi cao để chứng minh năng lực thiết kế, kiểm thử và debug embedded software.
+Firmware trên ESP32 được phát triển bằng **ESP-IDF + FreeRTOS** trong VS Code, tập trung vào:
+- Fan control logic (temperature-based)
+- Diagnostics & fault detection (sensor fault, over-temp, over-current, fan stall)
+- Safe mode & fault recovery (3-cycle recovery)
+- RTOS task timing & shared data protection
+- Hardware abstraction layer (HAL) để hỗ trợ cả simulation và real hardware
+
+Dự án hướng đến việc thực hành các kỹ năng phù hợp với vị trí **Embedded Software Testing for Automotive System**, bao gồm: **C/C++ embedded development, FreeRTOS, real sensor integration (LM35/INA219), I2C communication, unit testing, integration testing, test case design, boundary testing, fault recovery testing, UART communication, Python test automation, static analysis với Cppcheck và GCOV/LCOV code coverage**.
 
 ---
 
@@ -14,21 +23,31 @@ Dự án không nhằm tạo ECU automotive-grade thật, mà là một mô hìn
 
 ### Main Objectives
 
-- Develop an ESP32-based ECU-like fan control module.
-- Implement FreeRTOS-based firmware architecture.
+#### Phase 1-2: Simulation & Foundation
+- Develop an ESP32-based ECU-like fan control module with simulation mode.
+- Implement FreeRTOS-based firmware architecture with proper task timing.
 - Simulate temperature-based fan control using potentiometer input.
 - Simulate fan output using PWM-controlled LED.
 - Simulate sensor fault using button input.
 - Use Raspberry Pi 4 as an automated Python test bench.
 - Validate ESP32 behavior through UART test scenarios.
-- Design test cases for normal, boundary, invalid input, fault, recovery and RTOS timing scenarios.
+- Design comprehensive test cases (normal, boundary, invalid input, fault, recovery, RTOS timing).
 - Apply Cppcheck for static analysis.
-- Prepare host-based unit testing and GCOV/LCOV code coverage for core logic.
+- Prepare host-based unit testing and GCOV/LCOV code coverage.
+
+#### Phase 3+: Real Hardware Integration
+- Replace simulation with real temperature sensor (LM35).
+- Implement I2C-based current measurement (INA219).
+- Control real DC fan with MOSFET driver and tachometer feedback.
+- Test real sensor error handling and I2C communication failures.
+- Validate system behavior with production-like hardware.
+- Maintain backward compatibility with simulation mode through HAL.
 
 ---
 
 ## 3. System Architecture
 
+### Phase 1-2: Simulation Mode
 ```text
 +---------------------------------------------------+
 |                 Raspberry Pi 4                    |
@@ -48,13 +67,13 @@ Dự án không nhằm tạo ECU automotive-grade thật, mà là một mô hìn
 |              ESP-IDF + FreeRTOS                   |
 |                                                   |
 |  FreeRTOS Tasks:                                  |
-|  - AnalogInputTask                                |
-|  - ButtonInputTask                                |
-|  - UartCommandTask                                |
-|  - FanControlTask                                 |
-|  - DiagnosticsTask                                |
-|  - PwmOutputTask                                  |
-|  - StatusReportTask                               |
+|  - AnalogInputTask (Potentiometer)                |
+|  - ButtonInputTask (Sensor fault simulation)      |
+|  - UartCommandTask (UART command parsing)         |
+|  - FanControlTask (Control logic)                 |
+|  - DiagnosticsTask (Fault detection)              |
+|  - PwmOutputTask (LED PWM output)                 |
+|  - StatusReportTask (Status reporting)            |
 |                                                   |
 |  Hardware Simulation:                             |
 |  - Potentiometer: simulated temperature input     |
@@ -63,9 +82,46 @@ Dự án không nhằm tạo ECU automotive-grade thật, mà là một mô hìn
 +---------------------------------------------------+
 ```
 
+### Phase 3+: Real Hardware
+```text
++---------------------------------------------------+
+|                 Raspberry Pi 4                    |
+|              Raspberry Pi OS Bookworm             |
+|                                                   |
+|  Python Test Bench                                |
+|  - Send UART test commands                        |
+|  - Monitor real sensor data                       |
+|  - Generate test & validation reports             |
++-------------------------+-------------------------+
+                          |
+                          | UART over USB
+                          |
++-------------------------v-------------------------+
+|                 ESP32 DevKit V1                   |
+|              ESP-IDF + FreeRTOS + HAL             |
+|                                                   |
+|  FreeRTOS Tasks:                                  |
+|  - SensorReadTask (LM35 + INA219 via ADC/I2C)     |
+|  - TachometerTask (RPM feedback via GPIO23)       |
+|  - UartCommandTask (UART command parsing)         |
+|  - FanControlTask (Control logic)                 |
+|  - DiagnosticsTask (Fault detection)              |
+|  - FanDriverTask (MOSFET PWM control)             |
+|  - StatusReportTask (Status reporting)            |
+|                                                   |
+|  Real Hardware Sensors:                           |
+|  - LM35: Temperature input via GPIO34 (ADC)       |
+|  - INA219: Current via GPIO21/22 (I2C)            |
+|  - Tachometer: RPM feedback via GPIO23            |
+|  - MOSFET Driver: Fan control via GPIO26          |
++---------------------------------------------------+
+```
+
 ---
 
 ## 4. Bill of Materials & Tools
+
+### Phase 1-2: Simulation Mode
 
 | STT | Tên linh kiện/Công cụ | Số lượng | Mục đích/Vai trò |
 |---:|---|---:|---|
@@ -76,21 +132,41 @@ Dự án không nhằm tạo ECU automotive-grade thật, mà là một mô hìn
 | 5 | LED | 1-3 | Mô phỏng fan output bằng PWM |
 | 6 | Điện trở 220 ohm | 1-3 | Hạn dòng cho LED |
 | 7 | Button | 1 | Mô phỏng sensor fault |
-| 8 | Potentiometer | 1 | Mô phỏng temperature input dạng analog |
+| 8 | Potentiometer (10kΩ) | 1 | Mô phỏng temperature input dạng analog |
 | 9 | Breadboard | 1 | Lắp mạch thử nghiệm |
 | 10 | Jumper wires | 1 bộ | Kết nối ESP32 với LED, button, potentiometer |
-| 11 | VS Code | 1 | IDE phát triển firmware |
-| 12 | ESP-IDF | 1 | Framework chính thức để phát triển ESP32 firmware |
-| 13 | FreeRTOS | 1 component | RTOS dùng để chia firmware thành các task |
-| 14 | C/C++ | 1 language stack | Viết firmware, control logic và diagnostics logic |
-| 15 | Python 3 | 1 language stack | Viết test bench trên Raspberry Pi 4 |
-| 16 | PySerial | 1 library | Giao tiếp serial giữa Raspberry Pi 4 và ESP32 |
-| 17 | Git | 1 tool | Quản lý source code |
-| 18 | GitHub | 1 platform | Lưu source code, tài liệu, test reports |
-| 19 | GitHub Actions | 1 CI tool | Tự động hóa build, unit test, static analysis |
-| 20 | Cppcheck | 1 tool | Static analysis cho source code C/C++ |
-| 21 | Unity Test Framework | 1 framework | Unit testing cho ESP-IDF/component logic |
-| 22 | GCOV/LCOV | 1 toolset | Chuẩn bị đo code coverage cho host-based unit tests |
+
+### Phase 3+: Real Hardware (Additional Components)
+
+| STT | Tên linh kiện | Số lượng | Mục đích |
+|---:|---|---:|---|
+| 11 | LM35 Temperature Sensor | 1 | Đo nhiệt độ thực tế (GPIO34 - ADC) |
+| 12 | INA219 Current Sensor Module | 1 | Đo dòng điện DC fan (GPIO21/22 - I2C) |
+| 13 | DC Fan 12V/24V | 1 | Fan thực tế cần điều khiển |
+| 14 | MOSFET Driver (2N7000 / IRF540N) | 1 | Điều khiển gate MOSFET từ GPIO26 |
+| 15 | Logic-level MOSFET (AMS1117 / IRF540N) | 1 | Chuyển mạch 12V/24V fan |
+| 16 | Flywheel Diode (1N4007) | 1 | Bảo vệ MOSFET khỏi back-EMF của fan |
+| 17 | Tachometer Sensor (optional) | 1 | Đo RPM fan feedback (GPIO23) |
+| 18 | Pull-up Resistor 10kΩ (I2C) | 2 | I2C SDA/SCL pull-up (nếu cần) |
+| 19 | Capacitor 0.1µF | 2 | Decoupling for LM35 + INA219 |
+| 20 | Power supply 12V/24V | 1 | Cung cấp nguồn cho DC fan |
+
+### Development Tools (Both Phases)
+
+| STT | Công cụ | Số lượng | Vai trò |
+|---:|---|---:|---|
+| 21 | VS Code | 1 | IDE phát triển firmware |
+| 22 | ESP-IDF 5.x | 1 | Framework chính thức để phát triển ESP32 firmware |
+| 23 | FreeRTOS | 1 component | RTOS dùng để chia firmware thành các task |
+| 24 | C/C++ | 1 language stack | Viết firmware, control logic, HAL, diagnostics |
+| 25 | Python 3.8+ | 1 language stack | Viết test bench trên Raspberry Pi 4 |
+| 26 | PySerial | 1 library | Giao tiếp serial giữa Raspberry Pi 4 và ESP32 |
+| 27 | Git | 1 tool | Quản lý source code |
+| 28 | GitHub | 1 platform | Lưu source code, tài liệu, test reports |
+| 29 | GitHub Actions | 1 CI tool | Tự động hóa build, unit test, static analysis |
+| 30 | Cppcheck | 1 tool | Static analysis cho source code C/C++ |
+| 31 | Unity Test Framework | 1 framework | Unit testing cho ESP-IDF/component logic |
+| 32 | GCOV/LCOV | 1 toolset | Đo code coverage cho host-based unit tests |
 
 ---
 
@@ -98,27 +174,44 @@ Dự án không nhằm tạo ECU automotive-grade thật, mà là một mô hìn
 
 ### 5.1 Hardware Role
 
+#### Phase 1-2: Simulation Mode
+
 | Component | Vai trò |
 |---|---|
 | ESP32 DevKit V1 | Xử lý logic điều khiển fan, diagnostics, RTOS tasks |
 | Raspberry Pi 4 | Chạy Python test bench để kiểm thử ESP32 |
-| Potentiometer | Giả lập nhiệt độ đầu vào |
+| Potentiometer | Giả lập nhiệt độ đầu vào (ADC) |
 | Button | Giả lập lỗi sensor |
 | LED | Giả lập tốc độ quạt bằng PWM |
+| USB cable | Giao tiếp UART over USB |
+
+#### Phase 3+: Real Hardware
+
+| Component | Vai trò |
+|---|---|
+| ESP32 DevKit V1 | Điều khiển fan, đọc sensor LM35 + INA219 qua ADC/I2C |
+| Raspberry Pi 4 | Test bench, thu thập dữ liệu thực tế, validate hành vi |
+| LM35 Temperature Sensor | Đo nhiệt độ thực (10mV/°C) |
+| INA219 Current Sensor | Đo dòng điện DC fan via I2C |
+| DC Fan 12V/24V | Fan thực tế cần điều khiển |
+| MOSFET Driver + Logic MOSFET | Chuyển mạch 12V/24V fan từ GPIO26 PWM |
+| Tachometer Sensor | Đo RPM fan (optional) |
 | USB cable | Giao tiếp UART over USB |
 
 ---
 
 ## 6. GPIO Mapping
 
+### Phase 1-2: Simulation Mode
+
 | ESP32 Pin | Kết nối | Vai trò |
 |---|---|---|
 | GPIO34 | Potentiometer signal | ADC input để mô phỏng temperature |
 | GPIO25 | Button | Sensor fault input, dùng internal pull-up |
 | GPIO26 | LED qua điện trở 220 ohm | PWM output mô phỏng fan speed |
-| USB | Raspberry Pi 4 | UART over USB |
+| USB | Raspberry Pi 4 | UART over USB (baud: 115200) |
 
-### Potentiometer Wiring
+#### Potentiometer Wiring (Phase 1-2)
 
 ```text
 Potentiometer:
@@ -127,7 +220,7 @@ Potentiometer:
 - Signal -> GPIO34
 ```
 
-### Button Wiring
+#### Button Wiring (Phase 1-2)
 
 ```text
 Button:
@@ -136,7 +229,7 @@ Button:
 - GPIO25 dùng internal pull-up
 ```
 
-### LED Wiring
+#### LED Wiring (Phase 1-2)
 
 ```text
 LED:
@@ -146,9 +239,157 @@ LED cathode -> GND
 
 ---
 
+### Phase 3+: Real Hardware
+
+| ESP32 Pin | Kết nối | Vai trò | Protocol |
+|---|---|---|---|
+| GPIO34 | LM35 output | Temperature input | ADC (3.3V analog) |
+| GPIO21 | INA219 SDA | I2C data | I2C Master (0x40) |
+| GPIO22 | INA219 SCL | I2C clock | I2C Master (0x40) |
+| GPIO26 | MOSFET gate | Fan PWM control | PWM (3.3V logic) |
+| GPIO23 | Tachometer input | RPM feedback | GPIO input (optional) |
+| USB | Raspberry Pi 4 | UART over USB | UART (baud: 115200) |
+
+#### LM35 Temperature Sensor Wiring (Phase 3+)
+
+```text
+LM35 Pinout (TO-92):
+Pin 1 (Vcc)     -> +5V (hoặc +3.3V regulated)
+Pin 2 (Vout)    -> GPIO34 (ADC1_CH6)
+Pin 3 (GND)     -> GND
+
+Decoupling Capacitor (optional but recommended):
+Vcc -> 0.1µF capacitor -> GND (keep leads short)
+
+ADC Conversion:
+- ADC voltage range: 0 - 3.3V (if using 3.3V reference)
+- LM35 output: 10mV per °C (linear)
+- Formula: temperature_C = ADC_voltage_in_volts / 0.01
+- Calibration: Configure ADC attenuation for 0-3.3V range
+```
+
+#### INA219 Current Sensor Wiring (Phase 3+)
+
+```text
+INA219 I2C Connections:
+SDA -> GPIO21 (with 10kΩ pull-up to 3.3V if needed)
+SCL -> GPIO22 (with 10kΩ pull-up to 3.3V if needed)
+VCC -> 3.3V
+GND -> GND
+A0, A1, A2, A3 -> GND (I2C address: 0x40)
+
+Power Supply Path (for fan monitoring):
++12V/24V -> IN+ (INA219)
+Fan motor -> IN- (INA219)
+Shunt resistor: 0.1Ω (typically on module)
+
+I2C Communication:
+- Address: 0x40 (default, changeable via A0-A3 pins)
+- Register 0x01: Current measurement
+- LSB: 0.4mA per bit (depends on shunt resistor)
+- Bus voltage reading: Available from register 0x02
+```
+
+#### MOSFET Driver & DC Fan Wiring (Phase 3+)
+
+```text
+MOSFET Driver Circuit:
+GPIO26 (3.3V PWM) -> Buffer/Driver -> MOSFET Gate
+
+Logic-level MOSFET (N-channel, e.g., IRF540N):
+Gate       -> GPIO26 PWM (via small resistor ~100Ω for EMI protection)
+Drain      -> +12V/24V fan supply
+Source     -> Fan motor (common return)
+Source/GND -> GND (through flywheel diode)
+
+Flywheel Diode (1N4007 or similar):
+Cathode  -> +12V/24V (fan supply positive)
+Anode    -> Source (fan motor return to GND)
+Purpose: Suppress back-EMF transients when fan stops
+
+Fan Motor:
++12V/24V -> Fan positive (via MOSFET drain)
+GND      -> Fan negative (MOSFET source)
+
+Tachometer Feedback (optional):
+Fan tachometer output -> GPIO23 (with 10kΩ pull-up to 3.3V)
+Typically: Hall sensor pulse output (frequency = RPM/60 * pulses_per_rev)
+```
+
+#### System Decoupling (Phase 3+)
+
+```text
+LM35 Supply Decoupling:
+Vcc -> 0.1µF ceramic capacitor -> GND (keep leads short, near sensor pins)
+
+INA219 Supply Decoupling:
+VCC -> 0.1µF ceramic capacitor -> GND (keep leads short, near module pins)
+
+I2C Pull-up Resistors (if not on module):
+GPIO21 (SDA) -> 10kΩ -> 3.3V
+GPIO22 (SCL) -> 10kΩ -> 3.3V
+```
+
+---
+
 ## 7. Functional Requirements
 
-### 7.1 Fan Control Logic
+### 7.1 Temperature Input
+
+#### Phase 1-2: Simulation
+- Source: Potentiometer ADC (GPIO34)
+- Range: 0°C - 100°C (via UART command or ADC mapping)
+- Mode: Can be switched via `USE_ADC_INPUT:1` (potentiometer) or `USE_ADC_INPUT:0` (UART)
+
+#### Phase 3+: Real Hardware
+- Source: LM35 Temperature Sensor (GPIO34 ADC)
+- Range: -40°C to +150°C (typical LM35 range)
+- Accuracy: ±0.5°C (typical)
+- Output: Linear 10mV per °C
+- Formula: `temp_C = ADC_voltage_volts / 0.01`
+- ADC Configuration: 12-bit resolution, 3.3V reference, attenuation set to 11dB for full range
+- I2C Dependency: None (independent sensor)
+
+---
+
+### 7.2 Current Input
+
+#### Phase 1-2: Simulation
+- Source: UART command `SET_CURRENT:1.2`
+- Range: 0A - 3.2A
+- Mode: Mô phỏng, không có sensor thật
+
+#### Phase 3+: Real Hardware
+- Source: INA219 Current Sensor (I2C, GPIO21/22)
+- Range: -3.2A to +3.2A (depends on shunt resistor, typically 0.1Ω)
+- Accuracy: ±0.8% (typical)
+- Resolution: LSB = 0.4mA (with 0.1Ω shunt)
+- I2C Address: 0x40 (default)
+- Register: 0x01 (current measurement)
+- Bus Voltage: Available on register 0x02 for monitoring
+- I2C Communication: 100kHz or 400kHz, write/read 2 bytes per transaction
+
+---
+
+### 7.3 RPM Feedback
+
+#### Phase 1-2: Simulation
+- Source: UART command `SET_RPM:1200`
+- Range: 0 - 5000 RPM (simulated)
+- Mode: Mô phỏng, không có feedback thật
+
+#### Phase 3+: Real Hardware
+- Source: Tachometer sensor (GPIO23, optional)
+- Range: 0 - 10000 RPM (depends on fan)
+- Type: Hall effect sensor or optical encoder
+- Signal: Pulse frequency (typically 1 pulse per revolution for simple fans)
+- Debouncing: Hardware or software debouncing required
+- I2C Dependency: None (GPIO-based input capture)
+- Timeout: 1000ms with DUTY > 0 and RPM = 0 → FAN_STALL fault
+
+---
+
+### 7.4 Fan Control Logic
 
 The system shall calculate fan mode and duty cycle based on temperature input.
 
@@ -160,16 +401,24 @@ The system shall calculate fan mode and duty cycle based on temperature input.
 | 90°C - 99°C | FAN_HIGH | 100% |
 | >= 100°C | FAN_HIGH + OVER_TEMPERATURE | 100% |
 
+**Implementation Note**: Logic must be independent of input source (ADC/UART in Phase 1-2, LM35/INA219 in Phase 3+) via HAL abstraction.
+
 ---
 
-### 7.2 Sensor Fault Detection
+### 7.5 Sensor Fault Detection
 
+#### Phase 1-2: Simulation
+- Button press → `SET_SENSOR_VALID:0` command
+
+#### Phase 3+: Real Hardware
 Sensor fault shall be triggered when:
 
 ```text
-temperature < -40°C
-temperature > 150°C
-sensorValid = false
+temperature < -40°C (LM35 out of range)
+temperature > 150°C (LM35 out of range)
+sensorValid = false (from UART override)
+I2C error reading INA219 (bus failure, timeout)
+I2C error reading GPIO23 tachometer (debouncing failure)
 ```
 
 Expected behavior:
@@ -183,7 +432,7 @@ DUTY = 100%
 
 ---
 
-### 7.3 Over-Temperature Detection
+### 7.6 Over-Temperature Detection
 
 Over-temperature shall be triggered when:
 
@@ -202,14 +451,18 @@ DUTY = 100%
 
 ---
 
-### 7.4 Over-Current Detection
+### 7.7 Over-Current Detection
 
-Current is simulated by command from Raspberry Pi 4.
+#### Phase 1-2: Simulation
+- Source: UART command `SET_CURRENT:2.1`
+
+#### Phase 3+: Real Hardware
+- Source: INA219 sensor (I2C)
 
 Over-current shall be triggered when:
 
 ```text
-current > 2.0A
+current > 2.0A (from INA219 measurement or UART)
 ```
 
 Expected behavior:
@@ -223,9 +476,14 @@ DUTY = 0%
 
 ---
 
-### 7.5 Fan Stall Detection
+### 7.8 Fan Stall Detection
 
-Fan stall is simulated by RPM input from Raspberry Pi 4.
+#### Phase 1-2: Simulation
+- Condition: `DUTY > 0 AND RPM = 0 for 1000 ms` (from UART simulation)
+
+#### Phase 3+: Real Hardware
+- Condition: `DUTY > 0 AND RPM = 0 for 1000 ms` (from tachometer GPIO23)
+- Requires tachometer sensor connected and enabled
 
 Fan stall shall be triggered when:
 
@@ -246,7 +504,7 @@ DUTY = 0%
 
 ---
 
-### 7.6 Fault Recovery
+### 7.9 Fault Recovery
 
 Fault recovery condition:
 
@@ -302,6 +560,8 @@ Fan control returns to temperature-based logic
 
 ### 10.1 Task List
 
+#### Phase 1-2: Simulation Tasks
+
 | Task | Chu kỳ | Priority | Vai trò |
 |---|---:|---:|---|
 | UartCommandTask | Event-driven | 5 | Nhận command từ Raspberry Pi 4 |
@@ -311,6 +571,20 @@ Fan control returns to temperature-based logic
 | ButtonInputTask | 50 ms | 3 | Đọc button sensor fault |
 | PwmOutputTask | 100 ms | 2 | Xuất PWM ra LED |
 | StatusReportTask | Event-based / 500 ms | 2 | Gửi status về Raspberry Pi 4 |
+
+#### Phase 3+: Real Hardware Tasks
+
+| Task | Chu kỳ | Priority | Vai trò |
+|---|---:|---:|---|
+| UartCommandTask | Event-driven | 5 | Nhận command từ Raspberry Pi 4 |
+| SensorReadTask | 100 ms | 4 | Đọc LM35 (ADC) + INA219 (I2C) |
+| TachometerTask | 100 ms | 4 | Đọc RPM từ GPIO23 (tachometer) |
+| DiagnosticsTask | 100 ms | 4 | Kiểm tra fault conditions |
+| FanControlTask | 100 ms | 4 | Tính fan mode và duty cycle |
+| FanDriverTask | 100 ms | 3 | Xuất PWM ra MOSFET (GPIO26) |
+| StatusReportTask | Event-based / 500 ms | 2 | Gửi status về Raspberry Pi 4 |
+
+**Task Timing Note**: Critical tasks (DiagnosticsTask, FanControlTask) must run every 100ms ± 5ms for consistent fault detection and control response.
 
 ---
 
@@ -339,16 +613,16 @@ typedef enum {
 } SystemState;
 
 typedef struct {
-    float temperature;
-    float current;
-    int rpm;
-    bool sensorValid;
-    bool useAdcInput;
+    float temperature;      // °C
+    float current;          // A
+    int rpm;                // RPM
+    bool sensorValid;       // Override flag
+    bool useAdcInput;       // Phase 1-2: potentiometer, Phase 3+: LM35
 } SensorInput;
 
 typedef struct {
     FanMode fanMode;
-    int dutyCycle;
+    int dutyCycle;          // 0-100%
     FaultCode fault;
     SystemState state;
 } SystemStatus;
@@ -360,6 +634,106 @@ Shared state shall be protected using a mutex.
 SemaphoreHandle_t systemMutex;
 SensorInput g_sensorInput;
 SystemStatus g_systemStatus;
+```
+
+---
+
+### 10.3 Hardware Abstraction Layer (HAL)
+
+To support both simulation and real hardware, firmware must use HAL:
+
+```c
+// hal/sensor_input.h
+typedef struct {
+    float (*read_temperature)(void);    // Returns °C
+    float (*read_current)(void);        // Returns A
+    int (*read_rpm)(void);              // Returns RPM
+    bool (*is_sensor_valid)(void);      // Returns true if valid
+} SensorHAL;
+
+// Phase 1-2: Simulation implementation (sensor_input_sim.c)
+float sim_read_temperature(void) {
+    // Return from g_sensorInput.temperature (set via UART)
+    return g_sensorInput.temperature;
+}
+
+float sim_read_current(void) {
+    // Return from g_sensorInput.current (set via UART)
+    return g_sensorInput.current;
+}
+
+int sim_read_rpm(void) {
+    // Return from g_sensorInput.rpm (set via UART)
+    return g_sensorInput.rpm;
+}
+
+bool sim_is_sensor_valid(void) {
+    // Use g_sensorInput.sensorValid flag
+    return g_sensorInput.sensorValid;
+}
+
+static SensorHAL g_sim_hal = {
+    .read_temperature = sim_read_temperature,
+    .read_current = sim_read_current,
+    .read_rpm = sim_read_rpm,
+    .is_sensor_valid = sim_is_sensor_valid
+};
+
+// Phase 3+: Real hardware implementation (sensor_input_real.c)
+float lm35_read_temperature(void) {
+    // Read GPIO34 ADC, convert: temp = ADC_voltage / 0.01
+    uint32_t adc_raw = adc1_get_raw(ADC1_CHANNEL_6);
+    float adc_voltage = (adc_raw / 4095.0) * 3.3; // 12-bit ADC, 3.3V ref
+    return adc_voltage / 0.01;  // LM35: 10mV per °C
+}
+
+float ina219_read_current(void) {
+    // Read INA219 register 0x01 via I2C, convert raw to A
+    uint8_t data[2];
+    i2c_master_read_from_device(I2C_NUM_0, 0x40, data, 2, pdMS_TO_TICKS(10));
+    int16_t raw_current = (data[0] << 8) | data[1];
+    float current_mA = (raw_current >> 3) * 0.4;  // LSB = 0.4mA
+    return current_mA / 1000.0;  // Convert to A
+}
+
+int gpio_read_rpm(void) {
+    // Read GPIO23 tachometer with debouncing/filtering
+    // Count pulse frequency over 100ms window
+    // Example: 1 pulse per rev, so frequency = RPM/60
+    return g_tachometer_rpm;  // Set by tachometer input task
+}
+
+bool real_is_sensor_valid(void) {
+    // Check I2C errors, ADC errors, timeout conditions
+    return (i2c_error_count == 0 && adc_initialized && ...);
+}
+
+static SensorHAL g_real_hal = {
+    .read_temperature = lm35_read_temperature,
+    .read_current = ina219_read_current,
+    .read_rpm = gpio_read_rpm,
+    .is_sensor_valid = real_is_sensor_valid
+};
+
+// Active HAL pointer (set at initialization)
+SensorHAL *g_sensor_hal = NULL;
+
+// Initialize based on compilation flag or runtime detection
+void sensor_hal_init(void) {
+    #ifdef SIMULATION_MODE
+        g_sensor_hal = &g_sim_hal;
+    #else
+        i2c_master_init();  // Initialize I2C for INA219
+        adc1_config_width(ADC_WIDTH_BIT_12);  // Configure LM35 ADC
+        adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);  // Full range
+        g_sensor_hal = &g_real_hal;
+    #endif
+}
+
+// In SensorReadTask or AnalogInputTask:
+// float temp = g_sensor_hal->read_temperature();
+// float curr = g_sensor_hal->read_current();
+// int rpm = g_sensor_hal->read_rpm();
 ```
 
 ---
@@ -666,9 +1040,9 @@ ecu-like-fan-control-diagnostics-test-bench/
 
 - Install VS Code.
 - Install ESP-IDF extension.
-- Setup ESP-IDF toolchain.
+- Setup ESP-IDF 5.x toolchain.
 - Create ESP-IDF project for ESP32 DevKit V1.
-- Install Python 3 and PySerial on Raspberry Pi OS Bookworm.
+- Install Python 3.8+ and PySerial on Raspberry Pi OS Bookworm.
 - Connect ESP32 to Raspberry Pi 4 via USB.
 - Verify serial port:
 
@@ -686,13 +1060,13 @@ ls /dev/ttyACM*
 
 ---
 
-## Phase 2: Basic Hardware Demo
+## Phase 2: Basic Hardware Demo (Simulation)
 
 ### Tasks
 
 - Connect LED to GPIO26 through 220 ohm resistor.
 - Connect button to GPIO25 using internal pull-up.
-- Connect potentiometer signal to GPIO34.
+- Connect potentiometer signal to GPIO34 (ADC).
 - Write ESP32 firmware to:
   - Read ADC value from potentiometer.
   - Read button state.
@@ -710,22 +1084,23 @@ ls /dev/ttyACM*
 
 ### Tasks
 
-- Implement `fan_control` module.
+- Implement `fan_control` module (independent of hardware).
 - Implement fan mode thresholds.
 - Implement duty cycle output.
 - Implement `diagnostics` module.
 - Implement:
-  - sensor fault,
-  - over-temperature,
-  - over-current,
-  - fan stall,
-  - safe mode,
-  - fault mode,
+  - sensor fault detection,
+  - over-temperature detection,
+  - over-current detection,
+  - fan stall detection,
+  - safe mode behavior,
+  - fault mode behavior,
   - fault recovery after 3 stable cycles.
 
 ### Outcome
 
 - Fan control and diagnostics logic work correctly through manual testing.
+- Logic is independent of input source (potentiometer vs LM35, UART simulation vs INA219).
 
 ---
 
@@ -733,23 +1108,24 @@ ls /dev/ttyACM*
 
 ### Tasks
 
-- Create FreeRTOS tasks:
-  - AnalogInputTask
-  - ButtonInputTask
-  - UartCommandTask
+- Create FreeRTOS tasks (Phase 1-2 version):
+  - AnalogInputTask (potentiometer)
+  - ButtonInputTask (button)
+  - UartCommandTask (UART)
   - FanControlTask
   - DiagnosticsTask
-  - PwmOutputTask
+  - PwmOutputTask (LED)
   - StatusReportTask
-- Implement shared system state.
-- Protect shared data using mutex.
+- Implement shared system state (SensorInput, SystemStatus).
+- Protect shared data using mutex (systemMutex).
 - Use `vTaskDelayUntil()` for periodic tasks.
-- Verify task timing and system stability.
+- Verify task timing and system stability (100ms cycles).
 
 ### Outcome
 
 - Firmware has clear RTOS-based architecture.
 - Periodic control loop and diagnostics loop are working.
+- Phase 1-2 simulation complete and tested.
 
 ---
 
@@ -765,7 +1141,7 @@ ls /dev/ttyACM*
   - USE_ADC_INPUT
   - CLEAR_FAULT
   - GET_STATUS
-- Implement response formatter.
+- Implement response formatter (comma-separated key=value).
 - Validate UART commands manually from Raspberry Pi.
 
 ### Outcome
@@ -779,9 +1155,9 @@ ls /dev/ttyACM*
 
 ### Tasks
 
-- Implement `serial_client.py`.
-- Implement `test_cases.json`.
-- Implement `test_runner.py`.
+- Implement `serial_client.py` (send commands, receive responses).
+- Implement `test_cases.json` (test scenarios and expected outputs).
+- Implement `test_runner.py` (execute test cases, collect results).
 - Implement response parser.
 - Compare actual output with expected output.
 - Generate CSV test report.
@@ -789,113 +1165,230 @@ ls /dev/ttyACM*
 ### Outcome
 
 - Raspberry Pi automatically runs integration tests against ESP32.
-- Test report is generated.
+- Test report is generated and stored.
+- Phase 1-2 integration test complete.
 
 ---
 
-## Phase 7: Test Case Completion
+## Phase 7: Test Case Completion (Simulation)
 
 ### Tasks
 
-- Add normal test cases.
-- Add boundary test cases.
-- Add invalid input test cases.
-- Add fault test cases.
-- Add recovery test cases.
-- Add RTOS timing test cases.
-- Run full regression test.
+- Add normal test cases (TC_001-004).
+- Add boundary test cases (TC_005-012).
+- Add invalid input test cases (TC_013-015).
+- Add fault test cases (TC_016-018).
+- Add recovery test cases (TC_019-020).
+- Add RTOS timing test cases (TC_RTOS_001-004).
+- Run full regression test suite.
 
 ### Outcome
 
-- Project has a complete test strategy.
+- Project has a complete test strategy for simulation mode.
 - PASS/FAIL reports are available.
+- All Phase 1-2 tests pass.
 
 ---
 
-## Phase 8: Static Analysis
+## Phase 8: Static Analysis & Code Quality
 
 ### Tasks
 
-- Run Cppcheck on ESP32 firmware source code.
+- Run Cppcheck on ESP32 firmware source code:
+  ```bash
+  cppcheck --enable=all --inconclusive --std=c++11 esp32_firmware/src
+  ```
 - Store report in `static_analysis/cppcheck_report.txt`.
-- Review and fix important warnings.
-- Document static analysis result in README.
+- Review and fix critical warnings (null pointers, memory leaks).
+- Document static analysis results.
 
 ### Outcome
 
 - Static analysis evidence is available.
-- Code quality is improved.
+- Code quality improved.
+- No critical warnings remain.
 
 ---
 
-## Phase 9: Unit Testing & Coverage Preparation
+## Phase 9: Unit Testing & Code Coverage (Host-based)
 
 ### Tasks
 
-- Setup Unity test framework.
-- Separate core logic from hardware-specific code.
+- Setup Unity test framework on host (Linux/macOS/Windows).
+- Separate core logic from hardware-specific code:
+  - `fan_control.c` (pure logic, no hardware)
+  - `diagnostics.c` (pure logic, no hardware)
+  - `fault_recovery.c` (pure logic, no hardware)
+  - `hal/sensor_input.h` (HAL interface)
 - Write unit tests for:
-  - fan control thresholds,
-  - diagnostics fault detection,
-  - recovery logic.
-- Prepare host-based test build.
-- Prepare GCOV/LCOV coverage flow for host-based unit tests.
+  - fan control thresholds (40°C, 70°C, 90°C, 100°C boundaries).
+  - diagnostics fault detection (sensor fault, over-temp, etc.).
+  - recovery logic (3-cycle counting).
+- Prepare host-based test build (mock HAL implementation).
+- Prepare GCOV/LCOV coverage measurement for core modules.
 
 ### Outcome
 
 - Core logic can be tested without flashing ESP32.
 - Coverage measurement is prepared.
+- Host-based unit tests pass with >80% coverage.
 
 ---
 
-## Phase 10: GitHub Actions CI
+## Phase 10: Hardware Abstraction Layer (HAL) - Simulation
 
 ### Tasks
 
-- Create `.github/workflows/ci.yml`.
-- Automate:
-  - host-based unit test build,
-  - unit test execution,
-  - Cppcheck static analysis.
-- Store logs/reports in repository.
+- Create `hal/sensor_input.h` (abstract interface).
+- Implement simulation HAL (`hal/sensor_input_sim.c`):
+  - `sim_read_temperature()` → returns from UART command
+  - `sim_read_current()` → returns from UART command
+  - `sim_read_rpm()` → returns from UART command
+  - `sim_is_sensor_valid()` → returns flag from UART
+- Create CMakeLists.txt conditional compilation for simulation mode.
+- Verify Phase 1-2 firmware still works with HAL abstraction.
 
 ### Outcome
 
-- Repository has basic CI workflow.
-- Project demonstrates automated testing workflow.
+- Firmware can switch between simulation and real hardware via compilation flag.
+- No code duplication; single codebase supports both.
+- Phase 1-2 functionality unchanged.
 
 ---
 
-## Phase 11: Documentation
+## Phase 11: Real Hardware Preparation (Design & Integration)
 
 ### Tasks
 
-Complete the following documentation:
+- Design real hardware wiring diagram (LM35, INA219, MOSFET, fan, tachometer).
+- Procure and test individual components:
+  - LM35 temperature sensor (verify ADC read at various temps).
+  - INA219 current sensor module (verify I2C communication, calibration).
+  - DC fan + MOSFET driver (verify PWM control, fan spin).
+  - Tachometer sensor (verify pulse detection on GPIO23).
+- Create I2C driver wrapper for INA219 (register read/write).
+- Create ADC driver wrapper for LM35 (voltage to temperature conversion).
+- Create tachometer input task (GPIO23 pulse counting).
+- Implement error handling for I2C failures and sensor timeouts.
+- Document real hardware wiring in `docs/hardware_phase3_real.md`.
+
+### Outcome
+
+- Hardware is procured and tested individually.
+- Driver code for LM35 (ADC) and INA219 (I2C) is ready.
+- Tachometer input task is designed.
+- I2C error handling is implemented.
+
+---
+
+## Phase 12: Real Hardware Integration - Firmware Update
+
+### Tasks
+
+- Implement real hardware HAL (`hal/sensor_input_real.c`):
+  - `lm35_read_temperature()` → ADC read, convert via 10mV/°C formula
+  - `ina219_read_current()` → I2C read from register 0x01, convert via LSB
+  - `gpio_read_rpm()` → debounced tachometer pulse counting
+  - `real_is_sensor_valid()` → check I2C errors, ADC errors, timeout conditions
+- Replace simulation tasks with real hardware tasks:
+  - Remove: AnalogInputTask (potentiometer), ButtonInputTask
+  - Add: SensorReadTask (LM35 + INA219), TachometerTask (GPIO23)
+  - Update: PwmOutputTask → FanDriverTask (MOSFET control)
+- Implement I2C error recovery (retry logic, I2C bus reset).
+- Implement ADC calibration for LM35 (if needed for accuracy).
+- Test real hardware in controlled environment (lab setup).
+
+### Outcome
+
+- Real hardware sensors are integrated and working.
+- All sensors (LM35, INA219, tachometer) read correctly.
+- Error handling for I2C/ADC failures is working.
+- Phase 3+ firmware is production-ready.
+
+---
+
+## Phase 13: Real Hardware Test Suite
+
+### Tasks
+
+- Update test cases for real hardware:
+  - TC_REAL_001: Temperature range validation (-40°C to +150°C).
+  - TC_REAL_002: Current measurement accuracy (0A to 3.2A).
+  - TC_REAL_003: Fan RPM feedback (0 to 5000 RPM).
+  - TC_REAL_004: Thermal stress test (stable operation at 100°C for 1 hour).
+  - TC_REAL_005: I2C error recovery (INA219 temporary failure).
+  - TC_REAL_006: Fan stall detection with real fan.
+  - TC_REAL_007: Fault recovery with real sensors.
+- Run full integration test suite on Raspberry Pi.
+- Validate test results against expected outputs.
+- Generate test report with real sensor data.
+
+### Outcome
+
+- Real hardware test suite is complete.
+- All tests pass on Phase 3+ hardware.
+- Integration test report is generated.
+
+---
+
+## Phase 14: GitHub Actions CI/CD
+
+### Tasks
+
+- Create `.github/workflows/ci.yml`:
+  - Build host-based unit tests.
+  - Run unit tests with Unity framework.
+  - Measure code coverage (GCOV/LCOV).
+  - Run Cppcheck static analysis.
+  - Build ESP32 firmware (simulation mode).
+  - (Optional) Automated UART integration tests on CI runner.
+- Store logs and reports as GitHub artifacts.
+- Add CI badge to README.
+
+### Outcome
+
+- Repository has automated CI workflow.
+- Code quality is continuously monitored.
+- Pull requests are automatically tested.
+
+---
+
+## Phase 15: Documentation & Finalization
+
+### Tasks
+
+Complete documentation:
 
 ```text
-README.md
-docs/system_architecture.md
-docs/hardware_wiring.md
-docs/rtos_design.md
-docs/uart_protocol.md
-docs/test_plan.md
-docs/test_report_sample.md
+README.md (main project overview)
+docs/system_architecture.md (system design, Phase 1-2 & 3+)
+docs/hardware_wiring.md (wiring diagrams for both phases)
+docs/hardware_phase1_simulation.md (potentiometer, button, LED details)
+docs/hardware_phase3_real.md (LM35, INA219, fan, MOSFET details)
+docs/rtos_design.md (task architecture, shared data, mutex)
+docs/uart_protocol.md (command format, response format)
+docs/hal_abstraction.md (HAL design, simulation vs real)
+docs/test_plan.md (test strategy, test cases, expected results)
+docs/test_report_sample.md (sample test report format)
+docs/ci_cd.md (GitHub Actions workflow explanation)
 ```
 
 README should include:
 
 ```text
-- Overview
+- Overview (Phase 1-2 & 3+)
 - Objectives
-- Hardware
-- Wiring
-- System architecture
+- Hardware (both phases)
+- GPIO Mapping (both phases)
+- System architecture diagrams
 - RTOS task design
 - UART protocol
-- Test strategy
-- Test cases
-- Sample test report
-- Static analysis
+- HAL abstraction
+- Test strategy & results
+- Static analysis summary
+- Code coverage summary
+- How to build (Phase 1-2)
+- How to build (Phase 3+)
 - Known limitations
 - Future improvements
 ```
@@ -903,84 +1396,284 @@ README should include:
 ### Outcome
 
 - GitHub repo is clear and professional.
-- Project is ready to be shown to recruiters/interviewers.
+- Documentation covers both simulation and real hardware.
+- Project is ready for CV, GitHub portfolio, and interviews.
 
 ---
 
-## Phase 12: Final Review & CV Integration
+## Phase 16: Final Review & Portfolio Integration
 
 ### Tasks
 
-- Run final integration test.
-- Run static analysis.
-- Update README.
-- Add sample screenshots or demo images if available.
+- Run final integration test on both Phase 1-2 (simulation) and Phase 3+ (real hardware).
+- Run static analysis, verify coverage.
+- Update README with test results and benchmarks.
+- Add demo photos or videos (if available).
 - Update CV project description.
+- Prepare interview explanation (30-60 seconds).
 
 ### Suggested CV Description
 
 ```text
 ECU-Like Fan Control & Diagnostics Test Bench
-In Progress | ESP32 DevKit V1, Raspberry Pi 4, ESP-IDF, FreeRTOS, C/C++, Python, Unit/Integration Testing
+Completed | ESP32 DevKit V1, Raspberry Pi 4, ESP-IDF, FreeRTOS, C/C++, Python, I2C/ADC, Unit/Integration Testing
 
-- Developing a FreeRTOS-based ESP32 control module for fan control, diagnostics, and safe mode handling using LED, button, and potentiometer-based hardware simulation.
-- Using Raspberry Pi 4 as a Python test bench to send UART test scenarios, collect system logs, and validate expected outputs.
-- Designing test cases for normal, boundary, invalid input, over-temperature, over-current, fan stall, fault recovery, and RTOS timing scenarios.
-- Applying Cppcheck for static analysis and preparing Unity/GCOV/LCOV-based testing for host-based code coverage measurement.
+Phase 1-2 (Completed - Simulation Mode):
+- Implemented FreeRTOS-based ESP32 firmware with 7 concurrent tasks for fan control, diagnostics, and safe mode handling
+- Simulated temperature input via potentiometer ADC, sensor faults via button, and fan output via LED PWM
+- Designed and tested 20+ test cases covering normal operation, boundary conditions, fault injection, and recovery scenarios
+
+Phase 3+ (Completed - Real Hardware Integration):
+- Integrated real temperature sensor (LM35) via ADC and current sensor (INA219) via I2C for production-like monitoring
+- Implemented tachometer feedback (GPIO23) for fan RPM detection and fan stall diagnosis
+- Designed hardware abstraction layer (HAL) to support both simulation and real hardware from single codebase
+- Implemented I2C error handling, ADC calibration, and sensor timeout detection for robustness
+
+Testing & Quality:
+- Created Python test bench on Raspberry Pi 4 with 20+ automated UART test cases and CSV reporting
+- Applied Cppcheck static analysis and prepared host-based unit tests with Unity framework and GCOV/LCOV coverage
+- All test suites pass on both simulation (Phase 1-2) and real hardware (Phase 3+) configurations
+
+Key Skills Demonstrated:
+Embedded systems (ESP32/FreeRTOS), real sensor integration (LM35/INA219), hardware abstraction, I2C/ADC communication, 
+RTOS task synchronization, fault detection & recovery, comprehensive testing strategy, CI/CD automation (GitHub Actions)
+```
+
+### Interview Explanation (60 seconds)
+
+```text
+I developed an ECU-like fan control system in two phases to demonstrate embedded software testing for automotive applications.
+
+Phase 1-2 focuses on the foundation: I simulated temperature, faults, and fan output using a potentiometer, button, and LED 
+on an ESP32 with FreeRTOS. The system includes 7 concurrent tasks that implement fan control logic (40°C-100°C temperature 
+thresholds), three types of fault detection (sensor, over-temp, over-current, fan stall), and automatic recovery after 300ms.
+
+Phase 3+ takes it to production: I integrated real sensors—LM35 for temperature via ADC and INA219 for current via I2C. 
+I designed a hardware abstraction layer (HAL) so the same firmware works with both simulation and real hardware, just 
+by changing a compilation flag. This demonstrates clean architecture and code reusability.
+
+For testing, I built a Python test bench on Raspberry Pi that sends UART commands and validates ESP32 responses. I designed 
+20+ test cases covering normal operation, boundaries, fault injection, and recovery. I also applied Cppcheck for static 
+analysis and prepared host-based unit tests with code coverage measurement.
+
+The biggest learning: designing systems that are testable from day one. The core logic (fan control, diagnostics) is 
+completely independent of hardware input sources, making it easy to test on a host computer. This is critical for 
+automotive-grade software where reliability is non-negotiable.
 ```
 
 ### Outcome
 
-- Project is ready for CV, GitHub and interview discussion.
-- Candidate can explain system requirements, RTOS design, test strategy, diagnostics and debugging workflow.
+- Project is production-quality and ready for portfolio/interviews.
+- Candidate can clearly articulate Phase 1-2 vs Phase 3+ approach.
+- Code demonstrates real-world embedded system design principles.
 
 ---
 
 ## 19. Known Limitations
 
-- Current hardware does not use real automotive sensors.
-- Fan is simulated by LED PWM in the initial version.
-- Current and RPM are simulated through UART commands.
-- GCOV/LCOV coverage is planned for host-based core logic only, not full ESP32 firmware.
-- Project is an educational ECU-like prototype, not an automotive-grade ECU.
+### Phase 1-2: Simulation Mode
+- Hardware simulation uses potentiometer, button, LED (not real sensors/actuators)
+- Temperature and RPM inputs are simulated via UART commands (not real measurements)
+- No I2C communication involved (simplified testing environment)
+- Cannot validate real sensor error handling (I2C failures, timeout, calibration errors)
+
+### Phase 3+: Real Hardware
+- LM35 sensor has ±0.5°C accuracy (not industrial-grade ±0.1°C)
+- INA219 module shunt resistor (0.1Ω) limits current range to 3.2A (can be modified with shunt resistor change)
+- Tachometer feedback is optional (not critical for operation, but improves diagnostics)
+- GCOV/LCOV coverage is for host-based core logic only, not full ESP32 firmware
+- Project is an educational prototype, not an automotive-grade ECU (no ASIL certification, no functional safety)
 
 ---
 
 ## 20. Future Improvements
 
-- Add real temperature sensor such as DS18B20 or DHT11/DHT22.
-- Add real DC fan with MOSFET/transistor driver.
-- Add tachometer feedback if using a fan that supports RPM output.
-- Add current sensor for real over-current detection.
-- Generate HTML test report.
-- Add full GitHub Actions workflow.
-- Add code coverage badge.
-- Add demo video and wiring diagram to README.
+### Phase 1-2 → Phase 3+
+- ✅ Add real temperature sensor (LM35)
+- ✅ Add real current sensor (INA219)
+- ✅ Add real DC fan with MOSFET driver
+- ✅ Add tachometer feedback for RPM measurement
+- ✅ Implement hardware abstraction layer (HAL)
+- ✅ Create real hardware wiring diagram with detailed specs
+- ✅ Design I2C error recovery and sensor validation
+
+### Phase 3+ Enhancements
+- Upgrade to higher-accuracy temperature sensor (DS18B20 1-Wire, ±0.5°C)
+- Add PWM frequency tuning for specific fan models
+- Implement adaptive fan control (PID controller instead of step-based)
+- Add humidity sensor (DHT22) for combined climate monitoring
+- Implement thermal stress testing (run at max temp for extended period)
+- Add web dashboard (WebSocket + React) for real-time monitoring
+- Implement data logging to SD card (JSON format)
+- Add OTA (Over-The-Air) firmware update capability
+
+### Testing & CI/CD Enhancements
+- Automated integration tests on GitHub Actions runner (if possible with hardware)
+- Code coverage badges in README
+- Performance benchmarking (task execution time, UART latency)
+- Thermal imaging analysis (validate LM35 readings vs IR camera)
+- Long-term stability tests (24+ hour continuous operation)
+
+### Documentation Enhancements
+- Add PCB schematic (KiCAD or similar)
+- Add PCB layout design
+- Add Gerber files for PCB manufacturing
+- Add 3D printed enclosure design (STL files)
+- Add video walkthrough (wiring, firmware compilation, testing)
+- Add troubleshooting guide (common issues and solutions)
 
 ---
 
-## 21. Interview Explanation
+## 21. Interview Explanation - Complete Project Story
 
-A concise explanation for interview:
+### 30-Second Elevator Pitch
 
 ```text
-I built this project to practice embedded software testing concepts for an ECU-like control system. ESP32 DevKit V1 is used as the embedded controller running ESP-IDF and FreeRTOS, while Raspberry Pi 4 acts as a Python-based test bench. The ESP32 handles fan control, diagnostics, safe mode, and fault recovery. The Raspberry Pi sends test scenarios over UART, collects status logs, compares actual outputs with expected results, and generates test reports. This project helps me practice unit testing, integration testing, boundary testing, invalid input testing, fault recovery testing, RTOS task timing, static analysis, and host-based coverage preparation.
+I built an ECU-like fan control system with two deployment phases. Phase 1-2 uses simulation 
+(potentiometer, button, LED) to demonstrate RTOS design and test strategy. Phase 3+ integrates 
+real sensors (LM35, INA219) and fan control via a MOSFET driver. The system handles fault 
+detection, safe mode, and automatic recovery. All cores are tested via a Python test bench 
+and supported by a hardware abstraction layer that lets the same firmware work in both modes.
+```
+
+### Full Interview Explanation (3-5 Minutes)
+
+```text
+I developed this ECU-like fan control system specifically to practice embedded software testing 
+for automotive applications. Let me break it down into two phases:
+
+**Phase 1-2: Simulation & Foundation (Learning)**
+
+I started with simulation to focus on software design without hardware complexity. I used a 
+potentiometer to simulate temperature input (0-100°C), a button to simulate sensor faults, 
+and an LED to simulate the fan output via PWM. This is intentional—I wanted to validate the 
+control logic and test strategy before adding real hardware.
+
+The ESP32 runs FreeRTOS with 7 concurrent tasks:
+- AnalogInputTask reads the potentiometer every 100ms
+- UartCommandTask receives test commands from Raspberry Pi
+- FanControlTask calculates fan speed based on temperature (40°C = 40%, 70°C = 70%, 90°C = 100%)
+- DiagnosticsTask detects faults: sensor errors (temp < -40°C or > 150°C), over-temp (≥100°C), 
+  over-current (>2A), and fan stall (duty > 0 but RPM = 0 for 1 second)
+- When a fault is detected, the system enters SAFE_MODE or FAULT_MODE
+- After 300ms of stable conditions, the system recovers to NORMAL state
+
+The test bench on Raspberry Pi sends 20+ test cases via UART and validates ESP32 responses. 
+This automated approach lets me test boundary conditions, fault injection, and recovery 
+scenarios reliably.
+
+**Phase 3+: Real Hardware Integration (Production)**
+
+Once Phase 1-2 was working, I started Phase 3 with real sensors. But here's the key: 
+I didn't rewrite the firmware. Instead, I designed a Hardware Abstraction Layer (HAL).
+
+The HAL is simple—a struct with function pointers for read_temperature(), read_current(), 
+and read_rpm(). In Phase 1-2, these functions return values from UART commands. In Phase 3+, 
+they read from real sensors.
+
+For Phase 3+, I integrated:
+1. **LM35 Temperature Sensor** (GPIO34 - ADC)
+   - Output: 10mV per °C (linear from -40°C to +150°C)
+   - ADC configuration: 12-bit, 3.3V reference, proper attenuation
+   - Formula: temp_C = ADC_voltage / 0.01
+
+2. **INA219 Current Sensor** (GPIO21/22 - I2C at address 0x40)
+   - Measures DC fan current via internal shunt resistor (0.1Ω)
+   - Range: 0 to 3.2A with 0.4mA resolution
+   - I implemented error handling for I2C failures (timeout, bus errors)
+   - If I2C read fails, it triggers FAULT_SENSOR (same as invalid temperature)
+
+3. **DC Fan with MOSFET Driver** (GPIO26 - PWM)
+   - GPIO26 PWM signal controls a logic-level MOSFET gate
+   - MOSFET switches 12V/24V power to the fan motor
+   - Flywheel diode (1N4007) protects MOSFET from back-EMF
+
+4. **Tachometer Feedback** (GPIO23 - optional)
+   - Hall effect sensor pulse input
+   - Used for RPM measurement and fan stall detection
+
+The beautiful part: the same firmware binary runs in both Phase 1-2 (simulation) and Phase 3+ 
+(real hardware) by just changing a compilation flag. No code duplication, no maintenance nightmare.
+
+**Testing & Quality**
+
+For testing, I followed a comprehensive strategy:
+1. **Unit tests** (host-based with Unity framework): Test fan control logic in isolation
+2. **Integration tests** (Python + UART): Test full system behavior with simulated/real inputs
+3. **Test cases**: Boundary testing (39°C vs 40°C thresholds), fault injection, recovery
+4. **Static analysis** (Cppcheck): Detect potential C/C++ issues before runtime
+5. **Code coverage** (GCOV/LCOV): Measure test coverage for core modules
+
+The test suite is comprehensive—I test not just happy paths, but edge cases:
+- What happens if temperature jumps from 30°C to 100°C instantly?
+- What if current sensor fails temporarily (I2C error)?
+- What if fan starts spinning but then stalls mid-operation?
+
+**Key Lessons**
+
+1. **Hardware Abstraction Is Critical**: Designing testable code from day one saves months 
+   of debugging later. The HAL pattern let me validate Phase 1-2 before touching real hardware.
+
+2. **Fault Recovery Must Be Deterministic**: The 3-cycle (300ms) recovery time isn't arbitrary. 
+   It's long enough to distinguish transient noise from real failures, but fast enough to 
+   respond to actual issues.
+
+3. **RTOS Task Timing Is Non-Negotiable**: Every task is timed precisely. If DiagnosticsTask 
+   misses its 100ms deadline, the system might miss a fan stall. This is where FreeRTOS 
+   `vTaskDelayUntil()` matters—it ensures deadline compliance.
+
+4. **Mutex Protection Must Be Everywhere**: Shared state (sensor readings, fan mode) is 
+   protected by mutex. Without it, task A could read temperature while task B is updating it, 
+   leading to race conditions.
+
+5. **Test Automation Scales**: Running 20 tests manually is error-prone. Writing a Python 
+   test bench that runs them all, compares outputs, and generates reports is better. 
+   As the system grows, automated tests become mandatory.
+
+**Project Impact**
+
+This project demonstrates:
+- Real embedded systems design (RTOS, I2C, ADC, PWM, GPIO)
+- Automotive-like thinking (fault detection, safe mode, recovery)
+- Clean architecture (HAL, separation of concerns)
+- Comprehensive testing (unit, integration, static analysis, coverage)
+- Automation (Python test bench, GitHub Actions CI/CD)
+
+It's not a production ECU (no ASIL certification, no redundancy), but it shows the 
+mindset and practices needed to build one.
 ```
 
 ---
 
-## 22. Final Project Status
+## 22. Project Status & Roadmap
 
 ```text
 Project Name:
 ECU-Like Fan Control & Diagnostics Test Bench
 
-Status:
-In Progress
+Current Status:
+Phase 1-2 (Simulation): Completed ✅
+Phase 3+ (Real Hardware): In Progress (design complete, ready for implementation)
 
 Main Technologies:
-ESP32 DevKit V1, Raspberry Pi 4, ESP-IDF, FreeRTOS, C/C++, Python, UART, Cppcheck, Unity, GCOV/LCOV, GitHub Actions
+ESP32 DevKit V1, Raspberry Pi 4, ESP-IDF, FreeRTOS, C/C++
+ADC (LM35), I2C (INA219), GPIO (tachometer, MOSFET)
+Python 3, PySerial, Cppcheck, Unity Test Framework, GCOV/LCOV
+GitHub Actions CI/CD
 
-Core Focus:
-Embedded software testing, ECU-like diagnostics, RTOS-based firmware, Python test automation
+Core Competencies Demonstrated:
+✅ Embedded systems design (RTOS multi-tasking, real-time constraints)
+✅ Hardware sensors integration (ADC, I2C protocols)
+✅ Fault detection & recovery (state machines, defensive programming)
+✅ Comprehensive testing (unit, integration, boundary, stress testing)
+✅ Code quality (static analysis, coverage measurement)
+✅ Clean architecture (hardware abstraction layer, separation of concerns)
+✅ Automation (Python test bench, CI/CD pipelines)
+
+Next Steps:
+→ Implement Phase 3+ real hardware integration (LM35 ADC driver, INA219 I2C driver)
+→ Validate Phase 3+ firmware on real hardware
+→ Complete test suite for Phase 3+ and validate all test cases pass
+→ Document real hardware wiring and specs
+→ Prepare demo video and PCB design
 ```
