@@ -1,9 +1,10 @@
 # ECU-Like Fan Control & Diagnostics Test Bench
 
+**Quick Reference for OpenCode Agents** | For detailed specifications, wiring diagrams, and functional requirements, see **README.md**
+
 ## Project Overview
 Embedded systems project combining ESP32 firmware (FreeRTOS-based) with Python-based automated testing on Raspberry Pi 4. The system demonstrates ECU-like fan control, diagnostics, safe mode, and fault recovery mechanisms.
 
-### Project Phases
 - **Phase 1-2**: Simulation mode (Potentiometer, Button, LED) - Foundation & Learning
 - **Phase 3+**: Real hardware (LM35, INA219, DC Fan with Tachometer) - Production-ready
 
@@ -47,53 +48,43 @@ ecu-like-fan-control-diagnostics-test-bench/
 
 ## Architecture & Key Points
 
-### Hardware Mapping
+### Hardware Mapping (See README §4-6 for wiring diagrams)
 
-#### Phase 1-2: Simulation Mode
-| GPIO/Interface | Component | Role |
-|--------|-----------|------|
-| GPIO34 | Potentiometer | ADC input (temperature simulation) |
-| GPIO25 | Button | Sensor fault input (internal pull-up) |
-| GPIO26 | LED (220Ω resistor) | PWM output (fan speed simulation) |
-| USB | Raspberry Pi | UART over USB (baud: 115200) |
+**Phase 1-2 Simulation**: GPIO34 (potentiometer), GPIO4 (button), GPIO26 (LED), USB (UART@115200)
+**Phase 3+ Real Hardware**: GPIO34 (LM35), GPIO21/22 (INA219 I2C), GPIO26 (MOSFET), GPIO27 (tachometer), USB (UART@115200)
 
-#### Phase 3+: Real Hardware
-| GPIO/Interface | Component | Role |
-|--------|-----------|------|
-| GPIO34 (ADC) | LM35 Sensor | Temperature input (real sensor) |
-| GPIO21 (SDA) + GPIO22 (SCL) | INA219 | Current measurement via I2C |
-| GPIO26 (PWM) | MOSFET Driver | Control signal for DC fan |
-| GPIO23 | Tachometer input | Fan RPM feedback (optional) |
-| USB | Raspberry Pi | UART over USB (baud: 115200) |
+**GPIO Safety Notes for ESP32-WROOM-32**:
+- **Avoid GPIO6-11**: Flash memory pins (will cause system crash)
+- **Avoid GPIO12-15 during JTAG debugging**: JTAG pins, can cause issues
+- **GPIO21/22**: Pre-labeled as WIRE_SDA/WIRE_SCL, perfect for I2C
+- **GPIO4**: Has internal pull-up, ideal for button/input
+- **GPIO34**: ADC input only (no output capability)
+- **GPIO26**: Can be used as regular GPIO despite DAC_2 label
 
 ### FreeRTOS Task Structure
+
+#### Phase 1-2: Simulation Mode
 - **UartCommandTask** (P5): Event-driven, handles incoming commands
 - **DiagnosticsTask** (P4): 100ms cycle, fault detection
 - **FanControlTask** (P4): 100ms cycle, fan mode calculation
-- **AnalogInputTask** (P3): 100ms cycle, ADC reading
-- **ButtonInputTask** (P3): 50ms cycle, button state
-- **PwmOutputTask** (P2): 100ms cycle, LED PWM output
+- **AnalogInputTask** (P3): 100ms cycle, ADC reading (GPIO34: potentiometer)
+- **ButtonInputTask** (P3): 50ms cycle, button state (GPIO4: TOUCH0)
+- **PwmOutputTask** (P2): 100ms cycle, LED PWM output (GPIO26: DAC_2)
 - **StatusReportTask** (P2): Event/500ms, status reporting
 
-### Shared Data Protection
-- Use `systemMutex` (FreeRTOS semaphore) to protect:
-  - `SensorInput` (temperature, current, rpm, sensorValid, useAdcInput)
-  - `SystemStatus` (fanMode, dutyCycle, fault, state)
+#### Phase 3+: Real Hardware Mode
+- **UartCommandTask** (P5): Event-driven, handles incoming commands
+- **SensorReadTask** (P4): 100ms cycle, LM35 (ADC) + INA219 (I2C) reading
+- **DiagnosticsTask** (P4): 100ms cycle, fault detection (with I2C error handling)
+- **FanControlTask** (P4): 100ms cycle, fan mode calculation
+- **TachometerTask** (P3): 100ms cycle, tachometer RPM counting (GPIO27: TOUCH7)
+- **FanDriverTask** (P2): 100ms cycle, MOSFET PWM output (GPIO26: DAC_2)
+- **StatusReportTask** (P2): Event/500ms, status reporting
 
-### Fan Control Logic
-| Temperature | Mode | Duty |
-|-------------|------|------|
-| < 40°C | OFF | 0% |
-| 40-69°C | LOW | 40% |
-| 70-89°C | MEDIUM | 70% |
-| 90-99°C | HIGH | 100% |
-| ≥ 100°C | HIGH + FAULT | 100% |
-
-### Fault Handling
-- **Sensor Fault**: temp < -40°C OR temp > 150°C OR sensorValid=false → SAFE_MODE, FAN=HIGH, DUTY=100%
-- **Over-Current**: current > 2.0A → FAULT_MODE, FAN=OFF, DUTY=0%
-- **Fan Stall**: dutyCycle > 0 AND rpm=0 for 1000ms → FAULT_MODE, FAN=OFF, DUTY=0%
-- **Recovery**: Fault condition cleared for 3 consecutive 100ms cycles (300ms total)
+### Shared Data Protection & Fan Logic
+- Use `systemMutex` (FreeRTOS semaphore) to protect `SensorInput` and `SystemStatus` structures
+- **Fan Control**: OFF (<40°C) → LOW (40-69°C, 40%) → MEDIUM (70-89°C, 70%) → HIGH (≥90°C, 100%)
+- See README §7 for complete functional requirements
 
 ## UART Protocol
 
@@ -115,79 +106,28 @@ STATUS,TEMP=85,CURRENT=1.2,RPM=1200,FAN=MEDIUM,DUTY=70,FAULT=NONE,STATE=NORMAL
 
 ## Development Notes
 
-### Phase 1-2: Simulation Mode (Learning)
+### Setup & Hardware (See README §9 for detailed setup; §4-6 for hardware specs)
 
-#### Key Setup Requirements
-1. ESP32 firmware requires ESP-IDF 5.x and VS Code + ESP-IDF extension
-2. Raspberry Pi must have Python 3.8+ and PySerial installed
-3. FreeRTOS timing is critical: DiagnosticsTask and FanControlTask must run every 100ms
-4. Mutex protection is essential when accessing shared SensorInput and SystemStatus structures
-5. Test bench assumes UART over USB at /dev/ttyUSB0 or /dev/ttyACM0
+**Phase 1-2 Essentials**:
+- ESP32 firmware: ESP-IDF 5.x + FreeRTOS timing critical (DiagnosticsTask, FanControlTask every 100ms)
+- Mutex protection required for SensorInput and SystemStatus access
+- UART over USB at /dev/ttyUSB0 or /dev/ttyACM0 (baud: 115200)
 
-### Phase 3+: Real Hardware (Production)
-
-#### Additional Setup Requirements
-1. **LM35 Temperature Sensor**:
-   - Requires ADC calibration for accurate temperature reading
-   - Output: ~10mV per °C (linear, accurate from -55 to 150°C)
-   - Connection: GPIO34 (ADC1_CH6)
-   - Formula: `temperature_C = ADC_voltage / 0.01`
-
-2. **INA219 Current Sensor**:
-   - I2C protocol: GPIO21 (SDA) + GPIO22 (SCL)
-   - I2C address: 0x40 (default, configurable via A0-A3 pins)
-   - Requires esp-idf driver for I2C communication
-   - Shunt resistor: 0.1Ω (typical for 3.2A max range)
-   - Can measure both current and bus voltage
-
-3. **DC Fan with MOSFET Driver**:
-   - GPIO26: PWM control signal (to MOSFET gate)
-   - GPIO23: Tachometer feedback (optional, for RPM measurement)
-   - Requires flywheel diode protection (1N4007 or similar)
-   - MOSFET: AMS1117 3.3V regulator or similar logic-level MOSFET (RDS_on < 100mΩ)
-   - Fan voltage: 12V or 24V (depending on motor, power supply separate)
-
-#### I2C Communication Pattern
-```c
-// Initialize I2C
-i2c_config_t conf;
-conf.mode = I2C_MODE_MASTER;
-conf.sda_io_num = GPIO_NUM_21;
-conf.scl_io_num = GPIO_NUM_22;
-i2c_param_config(I2C_NUM_0, &conf);
-i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
-
-// Read from INA219 (register 0x01 for current)
-uint8_t data[2];
-i2c_master_read_from_device(I2C_NUM_0, INA219_ADDRESS, data, 2, pdMS_TO_TICKS(10));
-int16_t raw_current = (data[0] << 8) | data[1];
-float current_mA = (raw_current >> 3) * 0.4; // LSB = 0.4mA
-```
-
-### Important Conventions
-- All temperature values in °C (simulated via potentiometer ADC or UART commands in Phase 1-2; real LM35 in Phase 3+)
-- All duty cycle values as integers 0-100%
-- Status responses always include comma-separated key=value pairs
-- Fault recovery requires 3 consecutive stable control cycles (300ms minimum)
+**Phase 3+ Hardware**:
+- LM35: GPIO34 (ADC), ~10mV/°C, calibration required
+- INA219: GPIO21/22 (I2C 0x40), current & bus voltage measurement
+- DC Fan: GPIO26 (PWM via MOSFET), GPIO27 (tachometer optional)
 
 ### Hardware Abstraction Layer (HAL)
-To support both simulation and real hardware, firmware must use abstraction:
+Support both simulation and real hardware via abstraction:
 ```c
-// hal/sensor_input.h
 typedef struct {
     float (*read_temperature)(void);
     float (*read_current)(void);
     int (*read_rpm)(void);
 } SensorHAL;
-
-// Simulation implementation
-float sim_read_temperature(void) { return g_sensorInput.temperature; }
-float sim_read_current(void) { return g_sensorInput.current; }
-
-// Real hardware implementation
-float lm35_read_temperature(void) { /* ADC + LM35 conversion */ }
-float ina219_read_current(void) { /* I2C + INA219 read */ }
 ```
+Simulation returns g_sensorInput values; real hardware reads LM35 (ADC) and INA219 (I2C).
 
 ### Common Patterns
 - Use `xSemaphoreTake(systemMutex, portMAX_DELAY)` before reading/writing shared state

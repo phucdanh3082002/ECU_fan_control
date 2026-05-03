@@ -14,9 +14,6 @@ Firmware trên ESP32 được phát triển bằng **ESP-IDF + FreeRTOS** trong 
 - Safe mode & fault recovery (3-cycle recovery)
 - RTOS task timing & shared data protection
 - Hardware abstraction layer (HAL) để hỗ trợ cả simulation và real hardware
-
-Dự án hướng đến việc thực hành các kỹ năng phù hợp với vị trí **Embedded Software Testing for Automotive System**, bao gồm: **C/C++ embedded development, FreeRTOS, real sensor integration (LM35/INA219), I2C communication, unit testing, integration testing, test case design, boundary testing, fault recovery testing, UART communication, Python test automation, static analysis với Cppcheck và GCOV/LCOV code coverage**.
-
 ---
 
 ## 2. Project Objectives
@@ -102,7 +99,7 @@ Dự án hướng đến việc thực hành các kỹ năng phù hợp với v�
 |                                                   |
 |  FreeRTOS Tasks:                                  |
 |  - SensorReadTask (LM35 + INA219 via ADC/I2C)     |
-|  - TachometerTask (RPM feedback via GPIO23)       |
+|  - TachometerTask (RPM feedback via GPIO27)       |
 |  - UartCommandTask (UART command parsing)         |
 |  - FanControlTask (Control logic)                 |
 |  - DiagnosticsTask (Fault detection)              |
@@ -112,7 +109,7 @@ Dự án hướng đến việc thực hành các kỹ năng phù hợp với v�
 |  Real Hardware Sensors:                           |
 |  - LM35: Temperature input via GPIO34 (ADC)       |
 |  - INA219: Current via GPIO21/22 (I2C)            |
-|  - Tachometer: RPM feedback via GPIO23            |
+|  - Tachometer: RPM feedback via GPIO27            |
 |  - MOSFET Driver: Fan control via GPIO26          |
 +---------------------------------------------------+
 ```
@@ -146,7 +143,7 @@ Dự án hướng đến việc thực hành các kỹ năng phù hợp với v�
 | 14 | MOSFET Driver (2N7000 / IRF540N) | 1 | Điều khiển gate MOSFET từ GPIO26 |
 | 15 | Logic-level MOSFET (AMS1117 / IRF540N) | 1 | Chuyển mạch 12V/24V fan |
 | 16 | Flywheel Diode (1N4007) | 1 | Bảo vệ MOSFET khỏi back-EMF của fan |
-| 17 | Tachometer Sensor (optional) | 1 | Đo RPM fan feedback (GPIO23) |
+| 17 | Tachometer Sensor (optional) | 1 | Đo RPM fan feedback (GPIO27) |
 | 18 | Pull-up Resistor 10kΩ (I2C) | 2 | I2C SDA/SCL pull-up (nếu cần) |
 | 19 | Capacitor 0.1µF | 2 | Decoupling for LM35 + INA219 |
 | 20 | Power supply 12V/24V | 1 | Cung cấp nguồn cho DC fan |
@@ -202,14 +199,14 @@ Dự án hướng đến việc thực hành các kỹ năng phù hợp với v�
 
 ## 6. GPIO Mapping
 
-### Phase 1-2: Simulation Mode
+### Phase 1-2: Simulation Mode (ESP32-WROOM-32)
 
 | ESP32 Pin | Kết nối | Vai trò |
 |---|---|---|
-| GPIO34 | Potentiometer signal | ADC input để mô phỏng temperature |
-| GPIO25 | Button | Sensor fault input, dùng internal pull-up |
-| GPIO26 | LED qua điện trở 220 ohm | PWM output mô phỏng fan speed |
-| USB | Raspberry Pi 4 | UART over USB (baud: 115200) |
+| GPIO34 (ADC1_CH6) | Potentiometer signal | ADC input để mô phỏng temperature |
+| GPIO4 (TOUCH0) | Button | Sensor fault input, dùng internal pull-up |
+| GPIO26 (DAC_2) | LED qua điện trở 220 ohm | PWM output mô phỏng fan speed |
+| USB (GPIO1/GPIO3) | Raspberry Pi 4 | UART over USB (baud: 115200) |
 
 #### Potentiometer Wiring (Phase 1-2)
 
@@ -217,7 +214,212 @@ Dự án hướng đến việc thực hành các kỹ năng phù hợp với v�
 Potentiometer:
 - VCC    -> 3.3V ESP32
 - GND    -> GND ESP32
-- Signal -> GPIO34
+- Signal -> GPIO34 (ADC1_CH6)
+```
+
+#### Button Wiring (Phase 1-2)
+
+```text
+Button:
+- Một chân -> GND
+- Một chân -> GPIO4 (TOUCH0)
+- GPIO4 dùng internal pull-up (không cần pull-up resistor ngoài)
+```
+
+#### LED Wiring (Phase 1-2)
+
+```text
+LED:
+GPIO26 (DAC_2) -> Resistor 220 ohm -> LED anode
+LED cathode -> GND
+```
+
+---
+
+### Phase 3+: Real Hardware (ESP32-WROOM-32)
+
+| ESP32 Pin | Kết nối | Vai trò | Protocol |
+|---|---|---|---|
+| GPIO34 (ADC1_CH6) | LM35 output | Temperature input | ADC (3.3V analog) |
+| GPIO21 (WIRE_SDA) | INA219 SDA | I2C data | I2C Master (0x40) |
+| GPIO22 (WIRE_SCL) | INA219 SCL | I2C clock | I2C Master (0x40) |
+| GPIO26 (DAC_2) | MOSFET gate | Fan PWM control | PWM (3.3V logic) |
+| GPIO27 (TOUCH7) | Tachometer input | RPM feedback | GPIO input (optional) |
+| USB (GPIO1/GPIO3) | Raspberry Pi 4 | UART over USB | UART (baud: 115200) |
+
+#### LM35 Temperature Sensor Wiring (Phase 3+)
+
+```text
+LM35 Pinout (TO-92):
+Pin 1 (Vcc)     -> +5V (hoặc +3.3V regulated)
+Pin 2 (Vout)    -> GPIO34 (ADC1_CH6)
+Pin 3 (GND)     -> GND
+
+Decoupling Capacitor (optional but recommended):
+Vcc -> 0.1µF capacitor -> GND (keep leads short)
+
+ADC Configuration (ESP-IDF):
+- ADC1_CHANNEL_6 = GPIO34
+- Resolution: 12-bit (0-4095)
+- Attenuation: ADC_ATTEN_DB_11 (full 0-3.3V range)
+
+ADC Conversion Formula:
+ADC_voltage_V = (ADC_raw / 4095.0) * 3.3
+temperature_C = ADC_voltage_V / 0.01
+```
+
+#### INA219 Current Sensor Wiring (Phase 3+)
+
+```text
+INA219 I2C Connections (ESP32-WROOM-32):
+SDA -> GPIO21 (WIRE_SDA, pre-labeled with internal pull-up)
+SCL -> GPIO22 (WIRE_SCL, pre-labeled with internal pull-up)
+VCC -> 3.3V
+GND -> GND
+A0, A1, A2, A3 -> GND (I2C address: 0x40)
+
+Power Supply Path (for fan monitoring):
++12V/24V -> IN+ (INA219)
+Fan motor -> IN- (INA219)
+Shunt resistor: 0.1Ω (typically on module)
+
+I2C Communication (ESP-IDF):
+- Port: I2C_NUM_0
+- Speed: 100kHz or 400kHz
+- Address: 0x40 (default, changeable via A0-A3 pins)
+- Register 0x01: Current measurement
+- Register 0x02: Bus voltage
+- LSB (Current): 0.4mA per bit (with 0.1Ω shunt)
+
+I2C Data Read Example:
+uint8_t data[2];
+i2c_master_read_from_device(I2C_NUM_0, 0x40, data, 2, pdMS_TO_TICKS(10));
+int16_t raw_current = (data[0] << 8) | data[1];
+float current_mA = (raw_current >> 3) * 0.4;  // LSB = 0.4mA
+float current_A = current_mA / 1000.0;
+```
+
+#### MOSFET Driver & DC Fan Wiring (Phase 3+)
+
+```text
+GPIO26 PWM to MOSFET Driver Circuit:
+GPIO26 (3.3V PWM, freq: 1kHz-25kHz) -> Buffer/Driver -> MOSFET Gate
+
+Logic-level MOSFET (N-channel, e.g., IRF540N or similar):
+Gate       -> GPIO26 PWM (via small 100Ω resistor for EMI protection)
+Drain      -> +12V/24V fan supply
+Source     -> Fan motor (common return)
+Source/GND -> GND (through flywheel diode)
+
+Flywheel Diode (1N4007 or similar):
+Cathode  -> +12V/24V (fan supply positive)
+Anode    -> Source (fan motor return to GND)
+Purpose: Suppress back-EMF transients when fan stops
+
+Fan Motor Connection:
++12V/24V -> Fan positive (via MOSFET drain)
+GND      -> Fan negative (MOSFET source via flywheel diode)
+
+ESP-IDF PWM Configuration:
+- Timer: LEDC_TIMER_0
+- Channel: LEDC_CHANNEL_0
+- GPIO: GPIO26
+- Frequency: 5kHz (typical for MOSFET/fan)
+- Duty: 0-8191 (max 100% at 8191/8191)
+- Resolution: LEDC_TIMER_13_BIT (13-bit = 8191)
+```
+
+#### Tachometer Feedback Wiring (Phase 3+, Optional)
+
+```text
+Fan Tachometer Sensor:
+Tachometer output -> GPIO27 (TOUCH7, with 10kΩ pull-up to 3.3V)
+GND              -> GND
+
+Typical tachometer: 1 pulse per revolution
+RPM Calculation: RPM = (pulse_count / pulses_per_rev) * 60 / time_seconds
+
+ESP-IDF GPIO Input Configuration:
+- GPIO_NUM_27
+- GPIO mode: GPIO_MODE_INPUT
+- Pull-up: GPIO_PULLUP_ENABLE (internal pull-up recommended)
+- Edge interrupt: GPIO_INTR_NEGEDGE or GPIO_INTR_POSEDGE
+- Debouncing: Software debouncing with 5-10ms filter
+
+Tachometer Signal Characteristics:
+- Frequency: 0 Hz (stalled) to ~100 Hz (for typical fans)
+- Voltage: 3.3V logic level
+- Duty cycle: Typically 50% square wave
+```
+
+#### System Decoupling & Power (Phase 3+)
+
+```text
+LM35 Supply Decoupling:
+Vcc -> 0.1µF ceramic capacitor -> GND (keep leads short, near sensor pins)
+
+INA219 Supply Decoupling:
+VCC -> 0.1µF ceramic capacitor -> GND (keep leads short, near module pins)
+
+I2C Pull-up Resistors (usually on module, verify):
+GPIO21 (SDA) -> 10kΩ -> 3.3V (if not on module)
+GPIO22 (SCL) -> 10kΩ -> 3.3V (if not on module)
+
+Power Supply Notes:
+- 3.3V for ESP32, LM35, INA219: Regulated power supply (LP2950 or similar)
+- 12V/24V for DC Fan: Separate power supply with adequate current capacity
+- GND: Common ground between all components
+```
+
+#### Complete Wiring Summary for Phase 3+ (Real Hardware)
+
+```text
++-------------------+
+|   ESP32-WROOM-32  |
+|                   |
+| 3.3V -----+       |
+| GND ------+-------+--- GND (common)
+|                   |
+| GPIO34 (ADC) ---- LM35 Vout
+| GPIO21 (SDA) ---- INA219 SDA
+| GPIO22 (SCL) ---- INA219 SCL
+| GPIO26 (PWM) ---- MOSFET Gate (via 100Ω)
+| GPIO27 (GPIO) --- Tachometer (optional)
+|                   |
+| GPIO1 (TX) ---+   |
+| GPIO3 (RX) ---+-- UART to Raspberry Pi 4
++-------------------+
+
++-------------------+
+|      LM35         |
+| Vcc ---- +5V      |
+| Vout --- GPIO34   |
+| GND ---- GND      |
++-------------------+
+
++-------------------+
+|      INA219       |
+| VCC ---- 3.3V     |
+| SDA ---- GPIO21   |
+| SCL ---- GPIO22   |
+| IN+ ---- +12/24V  |
+| IN- ---- Fan(-)   |
+| GND ---- GND      |
++-------------------+
+
++-------------------+
+|    MOSFET Driver  |
+| Gate ---- GPIO26  |
+| Drain --- +12/24V |
+| Source -- Fan(+)  |
+|    & Flywheel     |
++-------------------+
+
++-------------------+
+|     DC Fan Motor  |
+| (+) ---- MOSFET   |
+| (-) ---- GND      |
++-------------------+
 ```
 
 #### Button Wiring (Phase 1-2)
@@ -247,7 +449,7 @@ LED cathode -> GND
 | GPIO21 | INA219 SDA | I2C data | I2C Master (0x40) |
 | GPIO22 | INA219 SCL | I2C clock | I2C Master (0x40) |
 | GPIO26 | MOSFET gate | Fan PWM control | PWM (3.3V logic) |
-| GPIO23 | Tachometer input | RPM feedback | GPIO input (optional) |
+| GPIO27 | Tachometer input | RPM feedback | GPIO input (optional) |
 | USB | Raspberry Pi 4 | UART over USB | UART (baud: 115200) |
 
 #### LM35 Temperature Sensor Wiring (Phase 3+)
@@ -312,7 +514,7 @@ Fan Motor:
 GND      -> Fan negative (MOSFET source)
 
 Tachometer Feedback (optional):
-Fan tachometer output -> GPIO23 (with 10kΩ pull-up to 3.3V)
+Fan tachometer output -> GPIO27 (with 10kΩ pull-up to 3.3V)
 Typically: Hall sensor pulse output (frequency = RPM/60 * pulses_per_rev)
 ```
 
@@ -379,7 +581,7 @@ GPIO22 (SCL) -> 10kΩ -> 3.3V
 - Mode: Mô phỏng, không có feedback thật
 
 #### Phase 3+: Real Hardware
-- Source: Tachometer sensor (GPIO23, optional)
+- Source: Tachometer sensor (GPIO27, optional)
 - Range: 0 - 10000 RPM (depends on fan)
 - Type: Hall effect sensor or optical encoder
 - Signal: Pulse frequency (typically 1 pulse per revolution for simple fans)
@@ -418,7 +620,7 @@ temperature < -40°C (LM35 out of range)
 temperature > 150°C (LM35 out of range)
 sensorValid = false (from UART override)
 I2C error reading INA219 (bus failure, timeout)
-I2C error reading GPIO23 tachometer (debouncing failure)
+I2C error reading GPIO27 tachometer (debouncing failure)
 ```
 
 Expected behavior:
@@ -482,7 +684,7 @@ DUTY = 0%
 - Condition: `DUTY > 0 AND RPM = 0 for 1000 ms` (from UART simulation)
 
 #### Phase 3+: Real Hardware
-- Condition: `DUTY > 0 AND RPM = 0 for 1000 ms` (from tachometer GPIO23)
+- Condition: `DUTY > 0 AND RPM = 0 for 1000 ms` (from tachometer GPIO27)
 - Requires tachometer sensor connected and enabled
 
 Fan stall shall be triggered when:
@@ -578,7 +780,7 @@ Fan control returns to temperature-based logic
 |---|---:|---:|---|
 | UartCommandTask | Event-driven | 5 | Nhận command từ Raspberry Pi 4 |
 | SensorReadTask | 100 ms | 4 | Đọc LM35 (ADC) + INA219 (I2C) |
-| TachometerTask | 100 ms | 4 | Đọc RPM từ GPIO23 (tachometer) |
+| TachometerTask | 100 ms | 4 | Đọc RPM từ GPIO27 (tachometer) |
 | DiagnosticsTask | 100 ms | 4 | Kiểm tra fault conditions |
 | FanControlTask | 100 ms | 4 | Tính fan mode và duty cycle |
 | FanDriverTask | 100 ms | 3 | Xuất PWM ra MOSFET (GPIO26) |
@@ -697,7 +899,7 @@ float ina219_read_current(void) {
 }
 
 int gpio_read_rpm(void) {
-    // Read GPIO23 tachometer with debouncing/filtering
+    // Read GPIO27 tachometer with debouncing/filtering
     // Count pulse frequency over 100ms window
     // Example: 1 pulse per rev, so frequency = RPM/60
     return g_tachometer_rpm;  // Set by tachometer input task
@@ -1265,10 +1467,10 @@ ls /dev/ttyACM*
   - LM35 temperature sensor (verify ADC read at various temps).
   - INA219 current sensor module (verify I2C communication, calibration).
   - DC fan + MOSFET driver (verify PWM control, fan spin).
-  - Tachometer sensor (verify pulse detection on GPIO23).
+  - Tachometer sensor (verify pulse detection on GPIO27).
 - Create I2C driver wrapper for INA219 (register read/write).
 - Create ADC driver wrapper for LM35 (voltage to temperature conversion).
-- Create tachometer input task (GPIO23 pulse counting).
+- Create tachometer input task (GPIO27 pulse counting).
 - Implement error handling for I2C failures and sensor timeouts.
 - Document real hardware wiring in `docs/hardware_phase3_real.md`.
 
@@ -1292,7 +1494,7 @@ ls /dev/ttyACM*
   - `real_is_sensor_valid()` → check I2C errors, ADC errors, timeout conditions
 - Replace simulation tasks with real hardware tasks:
   - Remove: AnalogInputTask (potentiometer), ButtonInputTask
-  - Add: SensorReadTask (LM35 + INA219), TachometerTask (GPIO23)
+  - Add: SensorReadTask (LM35 + INA219), TachometerTask (GPIO27)
   - Update: PwmOutputTask → FanDriverTask (MOSFET control)
 - Implement I2C error recovery (retry logic, I2C bus reset).
 - Implement ADC calibration for LM35 (if needed for accuracy).
@@ -1425,7 +1627,7 @@ Phase 1-2 (Completed - Simulation Mode):
 
 Phase 3+ (Completed - Real Hardware Integration):
 - Integrated real temperature sensor (LM35) via ADC and current sensor (INA219) via I2C for production-like monitoring
-- Implemented tachometer feedback (GPIO23) for fan RPM detection and fan stall diagnosis
+- Implemented tachometer feedback (GPIO27) for fan RPM detection and fan stall diagnosis
 - Designed hardware abstraction layer (HAL) to support both simulation and real hardware from single codebase
 - Implemented I2C error handling, ADC calibration, and sensor timeout detection for robustness
 
@@ -1588,7 +1790,7 @@ For Phase 3+, I integrated:
    - MOSFET switches 12V/24V power to the fan motor
    - Flywheel diode (1N4007) protects MOSFET from back-EMF
 
-4. **Tachometer Feedback** (GPIO23 - optional)
+4. **Tachometer Feedback** (GPIO27 - optional)
    - Hall effect sensor pulse input
    - Used for RPM measurement and fan stall detection
 
