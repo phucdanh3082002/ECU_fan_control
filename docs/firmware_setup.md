@@ -13,7 +13,7 @@ esp32_firmware/
 - Language: C
 - Framework: ESP-IDF v6.0 installed on the local machine
 - Target: ESP32 DevKit V1
-- Firmware behavior: Phase 3 core fan-control and diagnostics POC integrated with Phase 2 hardware I/O
+- Firmware behavior: Phase 5 UART command protocol running on the Phase 4 FreeRTOS task architecture, verified by the Phase 7 Python UART regression suite
 
 ## Phase 2 Hardware POC
 
@@ -72,6 +72,163 @@ Diagnostics implemented:
 
 Fault recovery requires the fault condition to be cleared for `3` consecutive `100 ms` control cycles.
 
+## Phase 4 FreeRTOS Task Architecture
+
+The single-loop Phase 3 firmware has been split into FreeRTOS tasks. Each task has one primary responsibility, and shared data is protected by `systemMutex`.
+
+| Task | Period | Priority | Responsibility |
+|---|---:|---:|---|
+| `UartCommandTask` | Event/poll driven | 5 | Reads USB UART commands and returns protocol responses |
+| `DiagnosticsTask` | 100 ms | 4 | Evaluates fault conditions and updates `SystemStatus` |
+| `FanControlTask` | 100 ms | 4 | Converts temperature to normal fan command |
+| `AnalogInputTask` | 100 ms | 3 | Reads `GPIO34` ADC and updates simulated temperature |
+| `ButtonInputTask` | 50 ms | 3 | Reads `GPIO4`; pressed means `sensorValid=false` |
+| `PwmOutputTask` | 100 ms | 2 | Writes `SystemStatus.dutyCycle` to `GPIO26` PWM |
+| `StatusReportTask` | 500 ms | 2 | Prints current status over USB serial monitor |
+
+Shared state:
+
+| State | Producer | Consumer |
+|---|---|---|
+| `SensorInput` | `AnalogInputTask`, `ButtonInputTask` | `FanControlTask`, `DiagnosticsTask`, `StatusReportTask` |
+| normal fan command | `FanControlTask` | `DiagnosticsTask` |
+| `SystemStatus` | `DiagnosticsTask` | `PwmOutputTask`, `StatusReportTask` |
+| debug ADC/button fields | `AnalogInputTask`, `ButtonInputTask` | `StatusReportTask` |
+
+Why this structure matters:
+
+- Hardware input is isolated from control logic.
+- Diagnostics can override normal fan output when a fault is active.
+- PWM output only consumes the final system status, so it does not need to know why a duty cycle was chosen.
+- The mutex prevents partial reads/writes when multiple tasks access shared state.
+- `vTaskDelayUntil()` keeps periodic tasks aligned to their intended cycle time instead of drifting over time.
+
+## Phase 5 UART Protocol
+
+UART protocol is handled by `UartCommandTask` on `UART0` through the ESP32 USB serial bridge.
+
+Serial settings:
+
+| Setting | Value |
+|---|---|
+| Port | `COM8` on this Windows machine |
+| Baud rate | `115200` |
+| Data bits | `8` |
+| Parity | None |
+| Stop bits | `1` |
+| Line ending | `\r\n` or `\n` |
+
+Supported commands:
+
+| Command | Behavior |
+|---|---|
+| `SET_TEMP:85` | Sets simulated temperature to `85C` and switches to UART temperature mode |
+| `SET_CURRENT:1.2` | Sets simulated current in amps |
+| `SET_RPM:1200` | Sets simulated RPM |
+| `SET_SENSOR_VALID:1` | Marks UART sensor override as valid |
+| `SET_SENSOR_VALID:0` | Triggers sensor fault via UART override |
+| `USE_ADC_INPUT:1` | Uses potentiometer/ADC temperature input |
+| `USE_ADC_INPUT:0` | Uses last UART temperature value |
+| `CLEAR_FAULT` | Requests diagnostics context reset; active faults will immediately re-latch |
+| `GET_STATUS` | Returns current status without changing state |
+
+Protocol response format:
+
+```text
+STATUS,TEMP=80.0,CURRENT=0.5,RPM=1200,FAN=MEDIUM,DUTY=70,FAULT=NONE,STATE=NORMAL
+```
+
+Invalid command response:
+
+```text
+ERROR,REASON=UNKNOWN_OR_INVALID_COMMAND
+```
+
+Implementation notes:
+
+- `SET_TEMP` intentionally switches `useAdcInput=false` so UART tests can control temperature directly.
+- `USE_ADC_INPUT:1` returns control to the potentiometer input.
+- Command responses are delayed by `350 ms` after state-changing commands so `AnalogInputTask`, `FanControlTask`, and `DiagnosticsTask` can converge before the status line is emitted.
+- `UartCommandTask` accepts real `CR/LF`, literal text `\n` or `\r`, and commands without line ending after a short idle timeout. This makes the protocol tolerant of serial tools such as Hercules.
+- `StatusReportTask` still emits periodic ESP-IDF log lines for human debugging; automated tools should parse lines that start exactly with `STATUS,` or `ERROR,`.
+
+Hercules-specific notes:
+
+- If Hercules shows text like `SET_CURRENT:2.5I (...) app_tasks: STATUS...`, it means the command was displayed in the receive window without a real line ending.
+- Firmware now parses this case after `300 ms` of UART receive idle time.
+- If you type `SET_CURRENT:2.5\n`, Hercules sends two literal characters (`\` and `n`), not a newline byte; firmware also accepts that case.
+- Periodic ESP-IDF logs still appear every `500 ms`, so protocol responses may be mixed with human-readable logs. Look for lines beginning exactly with `STATUS,` or `ERROR,`.
+
+## Phase 6 Python Test Bench
+
+The Python test bench automates UART integration testing against the running ESP32 firmware. It sends protocol commands, parses `STATUS,` and `ERROR,` response lines, compares expected fields, and writes a CSV report.
+
+Files:
+
+| File | Responsibility |
+|---|---|
+| `pi_test_bench/serial_client.py` | Opens the serial port, sends commands, and filters protocol responses |
+| `pi_test_bench/test_cases.json` | Defines setup commands, cleanup commands, and Phase 6 test cases |
+| `pi_test_bench/test_runner.py` | CLI runner that executes JSON test steps and prints pass/fail results |
+| `pi_test_bench/report_generator.py` | Writes CSV reports under `pi_test_bench/reports/` |
+
+Install dependencies:
+
+```bash
+python -m pip install -r pi_test_bench/requirements.txt
+```
+
+Run on this Windows machine:
+
+```bash
+python pi_test_bench/test_runner.py --port COM8
+```
+
+Run on Raspberry Pi:
+
+```bash
+python3 pi_test_bench/test_runner.py --port /dev/ttyUSB0
+```
+
+If the ESP32 appears as a CDC ACM device instead, use:
+
+```bash
+python3 pi_test_bench/test_runner.py --port /dev/ttyACM0
+```
+
+Runner behavior:
+
+- Setup commands reset simulated inputs before each test case.
+- Cleanup commands restore current, RPM, sensor validity, and `USE_ADC_INPUT:1` after all tests.
+- Expected fields are subset matches, so logs can include additional fields without breaking tests.
+- `wait_ms` steps support time-dependent checks such as fan-stall detection.
+- Generated CSV reports are local test artifacts and are ignored by git except for `pi_test_bench/reports/.gitkeep`.
+
+Important serial-port rule:
+
+- Only one program can own `COM8` at a time. Close `idf.py monitor`, Hercules, or any other serial terminal before running the Python test bench.
+
+## Phase 7 Test Case Completion
+
+Phase 7 expands the Phase 6 smoke tests into a full simulation-mode regression suite. The suite is still driven over UART, so it validates the same system path a Raspberry Pi test bench uses: command parser, shared state update, fan-control task, diagnostics task, and status formatting.
+
+Test coverage groups:
+
+| Group | Test IDs | Purpose |
+|---|---|---|
+| Normal operation | `TC_001` - `TC_004` | Fan OFF/LOW/MEDIUM/HIGH behavior in non-fault conditions |
+| Boundary behavior | `TC_005` - `TC_012` | Exact fan thresholds and `2.0A` over-current boundary |
+| Invalid input | `TC_013` - `TC_015` | Unknown command, malformed numeric value, invalid boolean value |
+| Fault behavior | `TC_016` - `TC_018` | Sensor fault, over-temperature, over-current |
+| Recovery behavior | `TC_019` - `TC_020` | Recovery after sensor and over-current faults clear |
+| RTOS timing | `TC_RTOS_001` - `TC_RTOS_004` | Response timing, command convergence, fan-stall timeout, recovery-cycle timing |
+
+Runner updates for Phase 7:
+
+- CSV reports now include `elapsed_ms` for each step.
+- Test steps can define `max_elapsed_ms` and `min_elapsed_ms` for timing assertions.
+- The serial parser trims protocol responses at the final protocol field, preventing ESP-IDF logs from contaminating CSV output.
+- No firmware changes were required for Phase 7; the extra logic is host-side test automation only.
 ## Activate ESP-IDF On This Windows Machine
 
 The standard `idf.py` command is not available in a plain PowerShell session until the ESP-IDF environment is activated.
@@ -137,8 +294,9 @@ When validating hardware:
 
 - `sdkconfig` is generated by ESP-IDF during the first build and should be reviewed before committing if project-specific options are added.
 - `sdkconfig.defaults` contains project defaults that should remain stable across machines.
-- UART command protocol logic is not implemented yet; it is planned for Phase 5.
-- FreeRTOS task separation is not implemented yet; it is planned for Phase 4.
+- UART protocol is implemented for Phase 5 commands.
+- Python test bench automation is implemented for Phase 6 in `pi_test_bench/`.
+- Phase 7 simulation regression coverage is implemented in `pi_test_bench/test_cases.json` and documented in `docs/test_plan.md`.
 
 ## Verified Baseline
 
@@ -168,4 +326,17 @@ Observed result:
 ```text
 ECU Fan Control Phase 3 core logic POC started
 STATUS,TEMP=18.8,CURRENT=0.5,RPM=1200,SENSOR=1,FAN=OFF,DUTY=0,FAULT=NONE,STATE=NORMAL,ADC_RAW=768,POT=19%,BUTTON=RELEASED
+```
+
+Phase 7 regression suite has been verified against the ESP32 on `COM8` with:
+
+```bash
+python pi_test_bench/test_runner.py --port COM8
+```
+
+Observed result:
+
+```text
+Summary: 34/34 steps passed
+Report: C:\Users\danhs\Downloads\ECU_fan_control\pi_test_bench\reports\test_report_20260504_203500.csv
 ```
