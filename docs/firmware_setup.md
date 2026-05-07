@@ -229,6 +229,117 @@ Runner updates for Phase 7:
 - Test steps can define `max_elapsed_ms` and `min_elapsed_ms` for timing assertions.
 - The serial parser trims protocol responses at the final protocol field, preventing ESP-IDF logs from contaminating CSV output.
 - No firmware changes were required for Phase 7; the extra logic is host-side test automation only.
+
+## Phase 8 Static Analysis
+
+Phase 8 applies Cppcheck to the ESP32 application firmware. Cppcheck is installed on this Windows machine at:
+
+```text
+C:\Program Files\Cppcheck\cppcheck.exe
+```
+
+The analysis uses the ESP-IDF generated `compile_commands.json` so Cppcheck sees the same include paths and defines as the firmware build. The project source directory is `esp32_firmware/main`, so the analysis filters to `*/main/*.c` instead of the roadmap placeholder `esp32_firmware/src`.
+
+Run from the repository root:
+
+```powershell
+& "C:\Program Files\Cppcheck\cppcheck.exe" --enable=all --inconclusive --check-level=exhaustive --force --inline-suppr --error-exitcode=1 --suppress=missingInclude --suppress=missingIncludeSystem --suppress=checkersReport --suppress="*:C:\esp\v6.0\esp-idf\*" --suppress="unusedFunction:esp32_firmware\main\main.c" --template=gcc --quiet --project="esp32_firmware/build/compile_commands.json" --file-filter="*/main/*.c" --output-file="static_analysis/cppcheck_report.txt"
+```
+
+Suppressions used:
+
+- `missingInclude` and `missingIncludeSystem`: Cppcheck environment noise for ESP-IDF and standard headers, not application defects.
+- `*:C:\esp\v6.0\esp-idf\*`: excludes findings inside ESP-IDF framework headers from the project report.
+- `unusedFunction:esp32_firmware\main\main.c`: `app_main` is called by ESP-IDF startup code, so standalone static analysis sees it as unused.
+- `checkersReport`: Cppcheck metadata, not a code issue.
+
+Current result:
+
+- Cppcheck exit code: `0` with `--error-exitcode=1`.
+- `static_analysis/cppcheck_report.txt` generated.
+- No unsuppressed warnings in application firmware.
+- No critical findings such as null-pointer use, memory leaks, invalid frees, or uninitialized application data.
+
+## Phase 9 Host Unit Tests And Coverage
+
+Phase 9 adds host-based unit tests for pure firmware logic. These tests run on the development machine with host `gcc`, so core logic can be validated without flashing the ESP32.
+
+Tested modules:
+
+| Module | Reason |
+|---|---|
+| `fan_control.c` | Pure temperature-to-fan command logic |
+| `diagnostics.c` | Fault detection, latch behavior, and recovery-cycle counting |
+| `system_types.c` | Enum-to-protocol string conversion |
+| `uart_protocol.c` | UART command parsing and response formatting |
+| `hal/sensor_input_sim.c` | Simulation HAL source selection and sensor-valid composition |
+
+Excluded module:
+
+- `app_tasks.c` is intentionally excluded from host unit tests because it depends on ESP-IDF drivers, FreeRTOS tasks, UART, GPIO, ADC, and PWM hardware APIs.
+
+Run from the repository root:
+
+```bash
+python unit_tests/run_tests.py
+```
+
+The script:
+
+- Compiles core firmware modules and test files with host `gcc`.
+- Runs a small Unity-style test harness under `unit_tests/unity/`.
+- Runs `gcov` for core modules.
+- Writes `coverage/coverage_summary.txt`.
+
+Current result:
+
+```text
+29 Tests 0 Failures
+TOTAL: 212/219 lines covered (96.8%)
+Coverage target: >80%
+Result: PASS
+```
+
+LCOV/genhtml are not installed on this Windows host. The build still generates `gcda`, `gcno`, and `gcov` data, so LCOV can be run later on a host where those tools are available.
+
+## Phase 10 HAL Simulation
+
+Phase 10 introduces a sensor input HAL for simulation mode. The firmware now reads sensor values through a small function-pointer interface instead of letting control and diagnostics depend directly on where the sensor values came from.
+
+Files:
+
+| File | Responsibility |
+|---|---|
+| `esp32_firmware/main/hal/sensor_input.h` | Generic sensor-input HAL interface |
+| `esp32_firmware/main/hal/sensor_input_sim.h` | Simulation-specific setter API used by UART, ADC, and button tasks |
+| `esp32_firmware/main/hal/sensor_input_sim.c` | Simulation HAL state and read functions |
+
+Simulation behavior:
+
+- `SET_TEMP:<value>` stores a UART temperature and switches `useAdcInput=false`.
+- `USE_ADC_INPUT:1` switches temperature back to the potentiometer-fed ADC value.
+- `SET_CURRENT:<value>` updates simulated current in the HAL.
+- `SET_RPM:<value>` updates simulated RPM in the HAL.
+- `SET_SENSOR_VALID:<0|1>` updates UART-controlled validity.
+- Button press still contributes to sensor validity, so `sensorValid = uartSensorValid && !buttonPressed`.
+
+CMake selection:
+
+- `ECU_SENSOR_HAL` defaults to `SIM`.
+- `hal/sensor_input_sim.c` is compiled when `ECU_SENSOR_HAL=SIM`.
+- Unsupported HAL selections fail CMake early with a clear error.
+
+Verification performed:
+
+- Host unit tests: `29 Tests 0 Failures`.
+- Host coverage: `96.8%` total line coverage including `sensor_input_sim.c` at `100.0%`.
+- ESP-IDF build: `Project build complete`.
+- Cppcheck: `EXIT=0`, no unsuppressed application-firmware findings.
+
+Hardware verification note:
+
+- Flash/regression on `COM8` could not be completed during Phase 10 because Windows did not enumerate `COM8`; only Bluetooth serial ports were visible. Reconnect/reset the ESP32 and rerun `idf.py -p COM8 flash` followed by `python pi_test_bench/test_runner.py --port COM8`.
+
 ## Activate ESP-IDF On This Windows Machine
 
 The standard `idf.py` command is not available in a plain PowerShell session until the ESP-IDF environment is activated.
@@ -297,6 +408,9 @@ When validating hardware:
 - UART protocol is implemented for Phase 5 commands.
 - Python test bench automation is implemented for Phase 6 in `pi_test_bench/`.
 - Phase 7 simulation regression coverage is implemented in `pi_test_bench/test_cases.json` and documented in `docs/test_plan.md`.
+- Phase 8 static analysis is documented in `docs/static_analysis.md`; local Cppcheck output is stored in `static_analysis/cppcheck_report.txt`.
+- Phase 9 host unit tests are documented in `docs/unit_testing.md`; coverage summary is stored in `coverage/coverage_summary.txt`.
+- Phase 10 HAL simulation is documented in `docs/hal_simulation.md`; firmware build passes, hardware regression is pending `COM8` availability.
 
 ## Verified Baseline
 
@@ -340,3 +454,44 @@ Observed result:
 Summary: 34/34 steps passed
 Report: C:\Users\danhs\Downloads\ECU_fan_control\pi_test_bench\reports\test_report_20260504_203500.csv
 ```
+
+Phase 8 Cppcheck analysis has been verified with:
+
+```text
+Cppcheck 2.20.0
+EXIT=0
+```
+
+The focused application-firmware report contains no unsuppressed warnings.
+
+Phase 9 host unit tests and GCOV coverage have been verified with:
+
+```bash
+python unit_tests/run_tests.py
+```
+
+Observed result:
+
+```text
+29 Tests 0 Failures
+TOTAL: 212/219 lines covered (96.8%)
+Result: PASS
+```
+
+Phase 10 HAL simulation firmware has been verified with:
+
+```bash
+idf.py build
+python unit_tests/run_tests.py
+```
+
+Observed result:
+
+```text
+Project build complete.
+29 Tests 0 Failures
+TOTAL: 212/219 lines covered (96.8%)
+Cppcheck EXIT=0
+```
+
+`idf.py -p COM8 flash` could not be completed because `COM8` was not present on this Windows host at verification time.

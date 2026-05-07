@@ -1,0 +1,13 @@
+Host unit-test coverage summary
+
+fan_control.c: 8/8 lines covered (100.0%)
+diagnostics.c: 40/41 lines covered (97.6%)
+system_types.c: 21/21 lines covered (100.0%)
+uart_protocol.c: 101/107 lines covered (94.4%)
+sensor_input_sim.c: 42/42 lines covered (100.0%)
+
+TOTAL: 212/219 lines covered (96.8%)
+Coverage target: >80%
+Result: PASS
+
+Note: LCOV/genhtml can consume the generated gcda/gcno data on hosts where lcov is installed.
