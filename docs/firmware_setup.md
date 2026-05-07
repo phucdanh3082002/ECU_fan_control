@@ -294,8 +294,8 @@ The script:
 Current result:
 
 ```text
-29 Tests 0 Failures
-TOTAL: 212/219 lines covered (96.8%)
+30 Tests 0 Failures
+TOTAL: 213/220 lines covered (96.8%)
 Coverage target: >80%
 Result: PASS
 ```
@@ -327,18 +327,30 @@ CMake selection:
 
 - `ECU_SENSOR_HAL` defaults to `SIM`.
 - `hal/sensor_input_sim.c` is compiled when `ECU_SENSOR_HAL=SIM`.
+- `hal/sensor_input_real.c` is compiled when `ECU_SENSOR_HAL=REAL`.
 - Unsupported HAL selections fail CMake early with a clear error.
 
 Verification performed:
 
-- Host unit tests: `29 Tests 0 Failures`.
+- Host unit tests: `30 Tests 0 Failures`.
 - Host coverage: `96.8%` total line coverage including `sensor_input_sim.c` at `100.0%`.
 - ESP-IDF build: `Project build complete`.
+- ESP-IDF real-HAL build: `idf.py -B build_real -DECU_SENSOR_HAL=REAL build` completed.
+- ESP32 flash on `COM8`: completed.
+- Direct UART smoke/regression on `COM8`: passed.
 - Cppcheck: `EXIT=0`, no unsuppressed application-firmware findings.
 
-Hardware verification note:
+## Phase 12 Real Hardware HAL Skeleton
 
-- Flash/regression on `COM8` could not be completed during Phase 10 because Windows did not enumerate `COM8`; only Bluetooth serial ports were visible. Reconnect/reset the ESP32 and rerun `idf.py -p COM8 flash` followed by `python pi_test_bench/test_runner.py --port COM8`.
+The real HAL is compile-selectable but does not replace the default simulation build. It reads LM35 on GPIO34, initializes INA219 on I2C0 GPIO21/GPIO22 at address `0x40`, and reports RPM as `SENSOR_RPM_UNAVAILABLE` because the current 2-wire fan has no tachometer output.
+
+Build command:
+
+```powershell
+idf.py -B build_real -DECU_SENSOR_HAL=REAL build
+```
+
+The `build_real/` output directory is ignored by Git.
 
 ## Activate ESP-IDF On This Windows Machine
 
@@ -410,7 +422,7 @@ When validating hardware:
 - Phase 7 simulation regression coverage is implemented in `pi_test_bench/test_cases.json` and documented in `docs/test_plan.md`.
 - Phase 8 static analysis is documented in `docs/static_analysis.md`; local Cppcheck output is stored in `static_analysis/cppcheck_report.txt`.
 - Phase 9 host unit tests are documented in `docs/unit_testing.md`; coverage summary is stored in `coverage/coverage_summary.txt`.
-- Phase 10 HAL simulation is documented in `docs/hal_simulation.md`; firmware build passes, hardware regression is pending `COM8` availability.
+- Phase 10 HAL simulation is documented in `docs/hal_simulation.md`; firmware build, flash, unit tests, Cppcheck, and direct UART smoke/regression pass.
 
 ## Verified Baseline
 
@@ -473,8 +485,8 @@ python unit_tests/run_tests.py
 Observed result:
 
 ```text
-29 Tests 0 Failures
-TOTAL: 212/219 lines covered (96.8%)
+30 Tests 0 Failures
+TOTAL: 213/220 lines covered (96.8%)
 Result: PASS
 ```
 
@@ -482,6 +494,7 @@ Phase 10 HAL simulation firmware has been verified with:
 
 ```bash
 idf.py build
+idf.py -p COM8 flash
 python unit_tests/run_tests.py
 ```
 
@@ -489,9 +502,9 @@ Observed result:
 
 ```text
 Project build complete.
-29 Tests 0 Failures
-TOTAL: 212/219 lines covered (96.8%)
+Flash done on COM8.
+30 Tests 0 Failures
+TOTAL: 213/220 lines covered (96.8%)
 Cppcheck EXIT=0
+Direct UART smoke/regression: PASS
 ```
-
-`idf.py -p COM8 flash` could not be completed because `COM8` was not present on this Windows host at verification time.

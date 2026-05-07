@@ -181,6 +181,22 @@ void test_diagnostics_fan_stall_timer_resets_when_rpm_recovers(void)
     TEST_ASSERT_EQUAL_UINT32(0U, context.fanStallElapsedMs);
 }
 
+void test_diagnostics_ignores_unavailable_rpm_for_fan_stall(void)
+{
+    DiagnosticsContext context;
+    diagnostics_init(&context);
+
+    const SensorInput input = make_sensor_input(80.0f, 0.5f, SENSOR_RPM_UNAVAILABLE, true);
+    const FanCommand command = make_fan_command(FAN_MEDIUM, 70);
+
+    for (int cycle = 0; cycle < 12; cycle++) {
+        const SystemStatus status = diagnostics_update(&context, &input, command, DIAGNOSTICS_CONTROL_CYCLE_MS);
+        assert_status(status, FAN_MEDIUM, 70, FAULT_NONE, STATE_NORMAL);
+    }
+
+    TEST_ASSERT_EQUAL_UINT32(0U, context.fanStallElapsedMs);
+}
+
 void test_diagnostics_recovery_requires_three_clear_cycles(void)
 {
     DiagnosticsContext context;

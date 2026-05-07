@@ -15,7 +15,13 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "hal/sensor_input.h"
+#if ECU_SENSOR_HAL_SIM
 #include "hal/sensor_input_sim.h"
+#elif ECU_SENSOR_HAL_REAL
+#include "hal/sensor_input_real.h"
+#else
+#error "Unsupported ECU_SENSOR_HAL selection"
+#endif
 #include <string.h>
 #include "system_types.h"
 #include "uart_protocol.h"
@@ -30,6 +36,7 @@
 
 #define ANALOG_INPUT_PERIOD_MS 100U
 #define BUTTON_INPUT_PERIOD_MS 50U
+#define SENSOR_READ_PERIOD_MS 100U
 #define FAN_CONTROL_PERIOD_MS 100U
 #define DIAGNOSTICS_PERIOD_MS 100U
 #define PWM_OUTPUT_PERIOD_MS 100U
@@ -48,6 +55,7 @@
 #define UART_COMMAND_TASK_PRIORITY 5
 #define DIAGNOSTICS_TASK_PRIORITY 4
 #define FAN_CONTROL_TASK_PRIORITY 4
+#define SENSOR_READ_TASK_PRIORITY 4
 #define ANALOG_INPUT_TASK_PRIORITY 3
 #define BUTTON_INPUT_TASK_PRIORITY 3
 #define PWM_OUTPUT_TASK_PRIORITY 2
@@ -68,7 +76,9 @@
 static const char *TAG = "app_tasks";
 
 static SemaphoreHandle_t systemMutex;
+#if ECU_SENSOR_HAL_SIM
 static adc_oneshot_unit_handle_t s_adc1_handle;
+#endif
 static DiagnosticsContext s_diagnostics;
 static const SensorInputHal *s_sensorInputHal;
 
@@ -97,6 +107,7 @@ static int g_potPercent;
 static bool g_buttonPressed;
 static bool g_clearFaultRequested;
 
+#if ECU_SENSOR_HAL_SIM
 static int clamp_adc_raw(int raw)
 {
     if (raw < 0) {
@@ -121,6 +132,7 @@ static float adc_raw_to_temperature_c(int raw)
     raw = clamp_adc_raw(raw);
     return ((float)raw * SIM_TEMP_MAX_C) / (float)ADC_RAW_MAX;
 }
+#endif
 
 static uint32_t percent_to_ledc_duty(int percent)
 {
@@ -135,6 +147,7 @@ static uint32_t percent_to_ledc_duty(int percent)
     return (uint32_t)((percent * (int)LEDC_MAX_DUTY + 50) / 100);
 }
 
+#if ECU_SENSOR_HAL_SIM
 static void configure_adc(void)
 {
     adc_oneshot_unit_init_cfg_t unit_config = {
@@ -161,6 +174,7 @@ static void configure_button(void)
     };
     ESP_ERROR_CHECK(gpio_config(&button_config));
 }
+#endif
 
 static void configure_led_pwm(void)
 {
@@ -277,25 +291,45 @@ static void apply_uart_command(const UartCommand *command)
 
     switch (command->type) {
     case UART_CMD_SET_TEMP:
+#if ECU_SENSOR_HAL_SIM
         sensor_input_sim_set_uart_temperature(command->floatValue);
         sensor_input_sim_set_use_adc_input(false);
         ESP_LOGI(TAG, "UART: SET_TEMP=%.1f, ADC disabled", command->floatValue);
+#else
+        ESP_LOGW(TAG, "UART: SET_TEMP ignored in real sensor HAL");
+#endif
         break;
     case UART_CMD_SET_CURRENT:
+#if ECU_SENSOR_HAL_SIM
         sensor_input_sim_set_current(command->floatValue);
         ESP_LOGI(TAG, "UART: SET_CURRENT=%.1f", command->floatValue);
+#else
+        ESP_LOGW(TAG, "UART: SET_CURRENT ignored in real sensor HAL");
+#endif
         break;
     case UART_CMD_SET_RPM:
+#if ECU_SENSOR_HAL_SIM
         sensor_input_sim_set_rpm(command->intValue);
         ESP_LOGI(TAG, "UART: SET_RPM=%d", command->intValue);
+#else
+        ESP_LOGW(TAG, "UART: SET_RPM ignored because tach input is not configured");
+#endif
         break;
     case UART_CMD_SET_SENSOR_VALID:
+#if ECU_SENSOR_HAL_SIM
         sensor_input_sim_set_uart_sensor_valid(command->boolValue);
         ESP_LOGI(TAG, "UART: SET_SENSOR_VALID=%d", command->boolValue);
+#else
+        ESP_LOGW(TAG, "UART: SET_SENSOR_VALID ignored in real sensor HAL");
+#endif
         break;
     case UART_CMD_USE_ADC_INPUT:
+#if ECU_SENSOR_HAL_SIM
         sensor_input_sim_set_use_adc_input(command->boolValue);
         ESP_LOGI(TAG, "UART: USE_ADC_INPUT=%d", command->boolValue);
+#else
+        ESP_LOGW(TAG, "UART: USE_ADC_INPUT ignored in real sensor HAL");
+#endif
         break;
     case UART_CMD_CLEAR_FAULT:
         g_clearFaultRequested = true;
@@ -333,6 +367,7 @@ static void process_uart_command_line(char *command_buffer)
     send_status_response();
 }
 
+#if ECU_SENSOR_HAL_SIM
 static void analog_input_task(void *parameter)
 {
     (void)parameter;
@@ -373,6 +408,25 @@ static void button_input_task(void *parameter)
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(BUTTON_INPUT_PERIOD_MS));
     }
 }
+#endif
+
+#if ECU_SENSOR_HAL_REAL
+static void sensor_read_task(void *parameter)
+{
+    (void)parameter;
+    TickType_t last_wake = xTaskGetTickCount();
+
+    while (true) {
+        const SensorInput input = read_sensor_input_from_hal();
+
+        lock_system_state();
+        g_sensorInput = input;
+        unlock_system_state();
+
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(SENSOR_READ_PERIOD_MS));
+    }
+}
+#endif
 
 static void fan_control_task(void *parameter)
 {
@@ -540,15 +594,24 @@ static void uart_command_task(void *parameter)
 
 void app_tasks_start(void)
 {
+#if ECU_SENSOR_HAL_SIM
     ESP_LOGI(TAG, "Configuring hardware: ADC GPIO%d, Button GPIO%d, LED PWM GPIO%d", TEMP_ADC_GPIO, BUTTON_GPIO, LED_PWM_GPIO);
 
     configure_adc();
     configure_button();
+#elif ECU_SENSOR_HAL_REAL
+    ESP_LOGI(TAG, "Configuring real hardware: LM35 GPIO%d, INA219 GPIO21/22, Fan PWM GPIO%d, GPIO27 not connected", TEMP_ADC_GPIO, LED_PWM_GPIO);
+#endif
     configure_led_pwm();
     configure_uart();
 
+#if ECU_SENSOR_HAL_SIM
     sensor_input_sim_init();
     s_sensorInputHal = sensor_input_sim_get_hal();
+#elif ECU_SENSOR_HAL_REAL
+    ESP_ERROR_CHECK(sensor_input_real_init());
+    s_sensorInputHal = sensor_input_real_get_hal();
+#endif
     g_sensorInput = read_sensor_input_from_hal();
 
     diagnostics_init(&s_diagnostics);
@@ -559,10 +622,18 @@ void app_tasks_start(void)
     create_task(uart_command_task, "UartCommandTask", TASK_STACK_MEDIUM, UART_COMMAND_TASK_PRIORITY);
     create_task(diagnostics_task, "DiagnosticsTask", TASK_STACK_MEDIUM, DIAGNOSTICS_TASK_PRIORITY);
     create_task(fan_control_task, "FanControlTask", TASK_STACK_MEDIUM, FAN_CONTROL_TASK_PRIORITY);
+#if ECU_SENSOR_HAL_SIM
     create_task(analog_input_task, "AnalogInputTask", TASK_STACK_MEDIUM, ANALOG_INPUT_TASK_PRIORITY);
     create_task(button_input_task, "ButtonInputTask", TASK_STACK_SMALL, BUTTON_INPUT_TASK_PRIORITY);
+#elif ECU_SENSOR_HAL_REAL
+    create_task(sensor_read_task, "SensorReadTask", TASK_STACK_MEDIUM, SENSOR_READ_TASK_PRIORITY);
+#endif
     create_task(pwm_output_task, "PwmOutputTask", TASK_STACK_MEDIUM, PWM_OUTPUT_TASK_PRIORITY);
     create_task(status_report_task, "StatusReportTask", TASK_STACK_LARGE, STATUS_REPORT_TASK_PRIORITY);
 
+#if ECU_SENSOR_HAL_SIM
     ESP_LOGI(TAG, "FreeRTOS tasks started: UART, diagnostics, fan control, analog input, button input, PWM output, status report");
+#elif ECU_SENSOR_HAL_REAL
+    ESP_LOGI(TAG, "FreeRTOS tasks started: UART, diagnostics, fan control, sensor read, fan PWM output, status report");
+#endif
 }

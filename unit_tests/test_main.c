@@ -15,6 +15,7 @@ void test_diagnostics_current_at_limit_does_not_fault(void);
 void test_diagnostics_over_current_has_priority_over_over_temperature(void);
 void test_diagnostics_fan_stall_latches_after_timeout(void);
 void test_diagnostics_fan_stall_timer_resets_when_rpm_recovers(void);
+void test_diagnostics_ignores_unavailable_rpm_for_fan_stall(void);
 void test_diagnostics_recovery_requires_three_clear_cycles(void);
 void test_diagnostics_new_active_fault_replaces_latched_fault(void);
 
@@ -61,6 +62,7 @@ int main(void)
     RUN_TEST(test_diagnostics_over_current_has_priority_over_over_temperature);
     RUN_TEST(test_diagnostics_fan_stall_latches_after_timeout);
     RUN_TEST(test_diagnostics_fan_stall_timer_resets_when_rpm_recovers);
+    RUN_TEST(test_diagnostics_ignores_unavailable_rpm_for_fan_stall);
     RUN_TEST(test_diagnostics_recovery_requires_three_clear_cycles);
     RUN_TEST(test_diagnostics_new_active_fault_replaces_latched_fault);
 

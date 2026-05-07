@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#define SENSOR_RPM_UNAVAILABLE (-1)
+
 typedef enum {
     FAN_OFF,
     FAN_LOW,

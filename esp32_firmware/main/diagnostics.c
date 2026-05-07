@@ -48,7 +48,8 @@ static FaultCode detect_active_fault(DiagnosticsContext *context,
         return FAULT_OVER_TEMP;
     }
 
-    if (normalCommand.dutyCycle > 0 && input->rpm == 0) {
+    const bool rpmFeedbackAvailable = input->rpm >= 0;
+    if (rpmFeedbackAvailable && normalCommand.dutyCycle > 0 && input->rpm == 0) {
         context->fanStallElapsedMs += cycleMs;
         if (context->fanStallElapsedMs >= DIAGNOSTICS_FAN_STALL_TIMEOUT_MS) {
             return FAULT_FAN_STALL;

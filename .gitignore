@@ -1,5 +1,6 @@
 # ESP-IDF build output
 build/
+build_*/
 managed_components/
 dependencies.lock
 sdkconfig.old
@@ -37,3 +38,4 @@ Thumbs.db
 *.tmp
 *.bak
 opencode.json
+AGENTS.md

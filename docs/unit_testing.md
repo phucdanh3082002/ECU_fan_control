@@ -54,19 +54,19 @@ The script performs these steps:
 ## Latest Result
 
 ```text
-29 Tests 0 Failures
+30 Tests 0 Failures
 ```
 
 Coverage result:
 
 ```text
 fan_control.c: 8/8 lines covered (100.0%)
-diagnostics.c: 40/41 lines covered (97.6%)
+diagnostics.c: 41/42 lines covered (97.6%)
 system_types.c: 21/21 lines covered (100.0%)
 uart_protocol.c: 101/107 lines covered (94.4%)
 sensor_input_sim.c: 42/42 lines covered (100.0%)
 
-TOTAL: 212/219 lines covered (96.8%)
+TOTAL: 213/220 lines covered (96.8%)
 Coverage target: >80%
 Result: PASS
 ```

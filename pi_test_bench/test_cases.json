@@ -1,0 +1,511 @@
+{
+  "config": {
+    "baud_rate": 115200,
+    "response_timeout_s": 5.0,
+    "startup_delay_s": 2.0
+  },
+  "setup_commands": [
+    "SET_CURRENT:0.5",
+    "SET_RPM:1200",
+    "SET_SENSOR_VALID:1",
+    "SET_TEMP:30",
+    "CLEAR_FAULT"
+  ],
+  "cleanup_commands": [
+    "SET_CURRENT:0.5",
+    "SET_RPM:1200",
+    "SET_SENSOR_VALID:1",
+    "USE_ADC_INPUT:1"
+  ],
+  "test_cases": [
+    {
+      "id": "TC_001",
+      "description": "Normal operation: temperature below 40C keeps fan off",
+      "steps": [
+        {
+          "command": "SET_TEMP:30",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 30.0,
+            "CURRENT": 0.5,
+            "RPM": 1200,
+            "FAN": "OFF",
+            "DUTY": 0,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_002",
+      "description": "Normal operation: low temperature band selects low fan",
+      "steps": [
+        {
+          "command": "SET_TEMP:50",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 50.0,
+            "FAN": "LOW",
+            "DUTY": 40,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_003",
+      "description": "Normal operation: medium temperature band selects medium fan",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_004",
+      "description": "Normal operation: high fan band below over-temperature fault threshold",
+      "steps": [
+        {
+          "command": "SET_TEMP:95",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 95.0,
+            "FAN": "HIGH",
+            "DUTY": 100,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_005",
+      "description": "Boundary: 39.9C is still fan off",
+      "steps": [
+        {
+          "command": "SET_TEMP:39.9",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 39.9,
+            "FAN": "OFF",
+            "DUTY": 0,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_006",
+      "description": "Boundary: 40.0C enters low fan band",
+      "steps": [
+        {
+          "command": "SET_TEMP:40.0",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 40.0,
+            "FAN": "LOW",
+            "DUTY": 40,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_007",
+      "description": "Boundary: 69.9C remains in low fan band",
+      "steps": [
+        {
+          "command": "SET_TEMP:69.9",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 69.9,
+            "FAN": "LOW",
+            "DUTY": 40,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_008",
+      "description": "Boundary: 70.0C enters medium fan band",
+      "steps": [
+        {
+          "command": "SET_TEMP:70.0",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 70.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_009",
+      "description": "Boundary: 89.9C remains in medium fan band",
+      "steps": [
+        {
+          "command": "SET_TEMP:89.9",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 89.9,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_010",
+      "description": "Boundary: 90.0C enters high fan band",
+      "steps": [
+        {
+          "command": "SET_TEMP:90.0",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 90.0,
+            "FAN": "HIGH",
+            "DUTY": 100,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_011",
+      "description": "Boundary: 99.9C stays normal just below over-temperature fault",
+      "steps": [
+        {
+          "command": "SET_TEMP:99.9",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 99.9,
+            "FAN": "HIGH",
+            "DUTY": 100,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_012",
+      "description": "Boundary: 2.0A current is allowed and does not trigger over-current",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        },
+        {
+          "command": "SET_CURRENT:2.0",
+          "expect": {
+            "TYPE": "STATUS",
+            "CURRENT": 2.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_013",
+      "description": "Invalid input: unknown command returns protocol error",
+      "steps": [
+        {
+          "command": "BOGUS",
+          "expect": {
+            "TYPE": "ERROR",
+            "REASON": "UNKNOWN_OR_INVALID_COMMAND"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_014",
+      "description": "Invalid input: malformed numeric value is rejected",
+      "steps": [
+        {
+          "command": "SET_TEMP:not_a_number",
+          "expect": {
+            "TYPE": "ERROR",
+            "REASON": "UNKNOWN_OR_INVALID_COMMAND"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_015",
+      "description": "Invalid input: boolean command accepts only 0 or 1",
+      "steps": [
+        {
+          "command": "SET_SENSOR_VALID:2",
+          "expect": {
+            "TYPE": "ERROR",
+            "REASON": "UNKNOWN_OR_INVALID_COMMAND"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_016",
+      "description": "Fault: invalid sensor enters safe mode and forces fan high",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        },
+        {
+          "command": "SET_SENSOR_VALID:0",
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "SENSOR_FAULT",
+            "STATE": "SAFE_MODE",
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_017",
+      "description": "Fault: 100C triggers over-temperature fault mode",
+      "steps": [
+        {
+          "command": "SET_TEMP:100",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 100.0,
+            "FAULT": "OVER_TEMPERATURE",
+            "STATE": "FAULT_MODE",
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_018",
+      "description": "Fault: current above 2.0A triggers over-current and disables fan output",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        },
+        {
+          "command": "SET_CURRENT:2.1",
+          "expect": {
+            "TYPE": "STATUS",
+            "CURRENT": 2.1,
+            "FAULT": "OVER_CURRENT",
+            "STATE": "FAULT_MODE",
+            "FAN": "OFF",
+            "DUTY": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_019",
+      "description": "Recovery: sensor fault clears after sensor validity is restored",
+      "steps": [
+        {
+          "command": "SET_SENSOR_VALID:0",
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "SENSOR_FAULT",
+            "STATE": "SAFE_MODE",
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        },
+        {
+          "command": "SET_SENSOR_VALID:1",
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "NONE",
+            "STATE": "NORMAL",
+            "FAN": "OFF",
+            "DUTY": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_020",
+      "description": "Recovery: over-current clears after current returns to a safe value",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        },
+        {
+          "command": "SET_CURRENT:2.1",
+          "expect": {
+            "TYPE": "STATUS",
+            "CURRENT": 2.1,
+            "FAULT": "OVER_CURRENT",
+            "STATE": "FAULT_MODE",
+            "FAN": "OFF",
+            "DUTY": 0
+          }
+        },
+        {
+          "command": "SET_CURRENT:0.5",
+          "expect": {
+            "TYPE": "STATUS",
+            "CURRENT": 0.5,
+            "FAULT": "NONE",
+            "STATE": "NORMAL",
+            "FAN": "MEDIUM",
+            "DUTY": 70
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_RTOS_001",
+      "description": "RTOS timing: GET_STATUS responds quickly without command-apply delay",
+      "steps": [
+        {
+          "command": "GET_STATUS",
+          "max_elapsed_ms": 500,
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_RTOS_002",
+      "description": "RTOS timing: state-changing command converges within one second",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "max_elapsed_ms": 1000,
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_RTOS_003",
+      "description": "RTOS timing: fan stall latches after timeout while fan is commanded on",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "FAN": "MEDIUM",
+            "DUTY": 70,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        },
+        {
+          "command": "SET_RPM:0",
+          "expect": {
+            "TYPE": "STATUS",
+            "RPM": 0,
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        },
+        {
+          "wait_ms": 1200
+        },
+        {
+          "command": "GET_STATUS",
+          "max_elapsed_ms": 500,
+          "expect": {
+            "TYPE": "STATUS",
+            "RPM": 0,
+            "FAULT": "FAN_STALL",
+            "STATE": "FAULT_MODE",
+            "FAN": "OFF",
+            "DUTY": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_RTOS_004",
+      "description": "RTOS timing: recovery completes after the required stable diagnostics cycles",
+      "steps": [
+        {
+          "command": "SET_SENSOR_VALID:0",
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "SENSOR_FAULT",
+            "STATE": "SAFE_MODE"
+          }
+        },
+        {
+          "command": "SET_SENSOR_VALID:1",
+          "max_elapsed_ms": 1000,
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    }
+  ]
+}
