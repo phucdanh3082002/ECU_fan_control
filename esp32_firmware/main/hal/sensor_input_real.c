@@ -32,7 +32,7 @@
 #define INA219_REG_CURRENT 0x04
 #define INA219_REG_CALIBRATION 0x05
 #define INA219_CONFIG_CONTINUOUS_32V_320MV_12BIT 0x399F
-#define INA219_SHUNT_RESISTANCE_OHM 0.01f
+#define INA219_SHUNT_RESISTANCE_OHM 0.1f
 #define INA219_CURRENT_LSB_A 0.0001f
 #define INA219_CALIBRATION_VALUE ((uint16_t)(0.04096f / (INA219_CURRENT_LSB_A * INA219_SHUNT_RESISTANCE_OHM)))
 
@@ -92,7 +92,6 @@ static void ina219_scan_i2c_bus(void)
 {
     ESP_LOGI(TAG, "I2C bus scan:");
     for (uint8_t addr = INA219_I2C_SCAN_MIN; addr <= INA219_I2C_SCAN_MAX; addr++) {
-        uint8_t dummy = 0;
         i2c_device_config_t scan_config = {
             .dev_addr_length = I2C_ADDR_BIT_LEN_7,
             .device_address = addr,
@@ -105,7 +104,9 @@ static void ina219_scan_i2c_bus(void)
             continue;
         }
 
-        err = i2c_master_transmit(scan_handle, &dummy, 0, INA219_I2C_TIMEOUT_MS);
+        uint8_t reg = 0x00;
+        uint8_t rx[2] = {0};
+        err = i2c_master_transmit_receive(scan_handle, &reg, 1, rx, sizeof(rx), INA219_I2C_TIMEOUT_MS);
         i2c_master_bus_rm_device(scan_handle);
 
         if (err == ESP_OK) {
