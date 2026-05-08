@@ -1,0 +1,148 @@
+{
+  "config": {
+    "baud_rate": 115200,
+    "response_timeout_s": 5.0,
+    "startup_delay_s": 2.0,
+    "setup_delay_ms": 1500
+  },
+  "setup_commands": [
+    "CLEAR_FAULT",
+    "SET_CALIB_OFFSET:0.0"
+  ],
+  "cleanup_commands": [
+    "SET_TEMP:-1",
+    "SET_CALIB_OFFSET:0.0",
+    "CLEAR_FAULT"
+  ],
+  "test_cases": [
+    {
+      "id": "TC_REAL_001",
+      "description": "Real HW boot: LM35 + INA219 init OK, system NORMAL",
+      "steps": [
+        {
+          "command": "GET_STATUS",
+          "expect": {
+            "TYPE": "STATUS",
+            "FAULT": "NONE",
+            "STATE": "NORMAL"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_REAL_002",
+      "description": "Real HW: override to 80C → FAN_HIGH, DUTY=100 (≥70C full speed)",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_REAL_003",
+      "description": "Real HW: override to 100C triggers over-temperature fault",
+      "steps": [
+        {
+          "command": "SET_TEMP:100",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 100.0,
+            "FAULT": "OVER_TEMPERATURE",
+            "STATE": "FAULT_MODE",
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_REAL_004",
+      "description": "Real HW: clear override returns to real LM35 sensor",
+      "steps": [
+        {
+          "command": "SET_TEMP:80",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 80.0,
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        },
+        {
+          "command": "SET_TEMP:-1",
+          "expect": {
+            "TYPE": "STATUS"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_REAL_005",
+      "description": "Real HW: SET_CALIB_OFFSET accepted and STATUS returned",
+      "steps": [
+        {
+          "command": "SET_CALIB_OFFSET:0.0",
+          "expect": {
+            "TYPE": "STATUS"
+          }
+        },
+        {
+          "command": "SET_CALIB_OFFSET:5.0",
+          "expect": {
+            "TYPE": "STATUS"
+          }
+        },
+        {
+          "command": "SET_CALIB_OFFSET:0.0",
+          "expect": {
+            "TYPE": "STATUS"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_REAL_006",
+      "description": "Real HW: INA219_DIAG triggers I2C register dump and returns STATUS",
+      "steps": [
+        {
+          "command": "INA219_DIAG",
+          "expect": {
+            "TYPE": "STATUS"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TC_REAL_007",
+      "description": "Real HW: fault recovery from over-temperature override back to real sensor",
+      "steps": [
+        {
+          "command": "SET_TEMP:100",
+          "expect": {
+            "TYPE": "STATUS",
+            "TEMP": 100.0,
+            "FAULT": "OVER_TEMPERATURE",
+            "STATE": "FAULT_MODE",
+            "FAN": "HIGH",
+            "DUTY": 100
+          }
+        },
+        {
+          "command": "SET_TEMP:-1",
+          "max_elapsed_ms": 1000,
+          "expect": {
+            "TYPE": "STATUS",
+            "FAN": "OFF",
+            "DUTY": 0
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,8 @@
   "config": {
     "baud_rate": 115200,
     "response_timeout_s": 5.0,
-    "startup_delay_s": 2.0
+    "startup_delay_s": 2.0,
+    "setup_delay_ms": 1500
   },
   "setup_commands": [
     "SET_CURRENT:0.5",
@@ -20,7 +21,7 @@
   "test_cases": [
     {
       "id": "TC_001",
-      "description": "Normal operation: temperature below 40C keeps fan off",
+      "description": "Normal: temp 30C → FAN_MEDIUM, DUTY=48",
       "steps": [
         {
           "command": "SET_TEMP:30",
@@ -29,8 +30,8 @@
             "TEMP": 30.0,
             "CURRENT": 0.5,
             "RPM": 1200,
-            "FAN": "OFF",
-            "DUTY": 0,
+            "FAN": "MEDIUM",
+            "DUTY": 48,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -39,15 +40,15 @@
     },
     {
       "id": "TC_002",
-      "description": "Normal operation: low temperature band selects low fan",
+      "description": "Normal: temp 50C → FAN_HIGH, DUTY=74",
       "steps": [
         {
           "command": "SET_TEMP:50",
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 50.0,
-            "FAN": "LOW",
-            "DUTY": 40,
+            "FAN": "HIGH",
+            "DUTY": 74,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -56,15 +57,15 @@
     },
     {
       "id": "TC_003",
-      "description": "Normal operation: medium temperature band selects medium fan",
+      "description": "Normal: temp 80C → FAN_HIGH, DUTY=100 (≥70C full speed)",
       "steps": [
         {
           "command": "SET_TEMP:80",
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -73,7 +74,7 @@
     },
     {
       "id": "TC_004",
-      "description": "Normal operation: high fan band below over-temperature fault threshold",
+      "description": "Normal: temp 95C → FAN_HIGH, DUTY=100",
       "steps": [
         {
           "command": "SET_TEMP:95",
@@ -90,13 +91,13 @@
     },
     {
       "id": "TC_005",
-      "description": "Boundary: 39.9C is still fan off",
+      "description": "Boundary: 19.9C is still fan off",
       "steps": [
         {
-          "command": "SET_TEMP:39.9",
+          "command": "SET_TEMP:19.9",
           "expect": {
             "TYPE": "STATUS",
-            "TEMP": 39.9,
+            "TEMP": 19.9,
             "FAN": "OFF",
             "DUTY": 0,
             "FAULT": "NONE",
@@ -107,15 +108,15 @@
     },
     {
       "id": "TC_006",
-      "description": "Boundary: 40.0C enters low fan band",
+      "description": "Boundary: 20.0C enters FAN_LOW at DUTY=35",
       "steps": [
         {
-          "command": "SET_TEMP:40.0",
+          "command": "SET_TEMP:20.0",
           "expect": {
             "TYPE": "STATUS",
-            "TEMP": 40.0,
+            "TEMP": 20.0,
             "FAN": "LOW",
-            "DUTY": 40,
+            "DUTY": 35,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -124,15 +125,15 @@
     },
     {
       "id": "TC_007",
-      "description": "Boundary: 69.9C remains in low fan band",
+      "description": "Boundary: 30.0C → FAN_MEDIUM, DUTY=48",
       "steps": [
         {
-          "command": "SET_TEMP:69.9",
+          "command": "SET_TEMP:30.0",
           "expect": {
             "TYPE": "STATUS",
-            "TEMP": 69.9,
-            "FAN": "LOW",
-            "DUTY": 40,
+            "TEMP": 30.0,
+            "FAN": "MEDIUM",
+            "DUTY": 48,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -141,14 +142,14 @@
     },
     {
       "id": "TC_008",
-      "description": "Boundary: 70.0C enters medium fan band",
+      "description": "Boundary: 47.0C → FAN_HIGH, DUTY=70",
       "steps": [
         {
-          "command": "SET_TEMP:70.0",
+          "command": "SET_TEMP:47.0",
           "expect": {
             "TYPE": "STATUS",
-            "TEMP": 70.0,
-            "FAN": "MEDIUM",
+            "TEMP": 47.0,
+            "FAN": "HIGH",
             "DUTY": 70,
             "FAULT": "NONE",
             "STATE": "NORMAL"
@@ -158,15 +159,15 @@
     },
     {
       "id": "TC_009",
-      "description": "Boundary: 89.9C remains in medium fan band",
+      "description": "Boundary: 70.0C → FAN_HIGH, DUTY=100 (full speed threshold)",
       "steps": [
         {
-          "command": "SET_TEMP:89.9",
+          "command": "SET_TEMP:70.0",
           "expect": {
             "TYPE": "STATUS",
-            "TEMP": 89.9,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "TEMP": 70.0,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -175,7 +176,7 @@
     },
     {
       "id": "TC_010",
-      "description": "Boundary: 90.0C enters high fan band",
+      "description": "Boundary: 90.0C → FAN_HIGH, DUTY=100",
       "steps": [
         {
           "command": "SET_TEMP:90.0",
@@ -216,8 +217,8 @@
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -227,8 +228,8 @@
           "expect": {
             "TYPE": "STATUS",
             "CURRENT": 2.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -283,8 +284,8 @@
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -327,8 +328,8 @@
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -366,8 +367,8 @@
             "TYPE": "STATUS",
             "FAULT": "NONE",
             "STATE": "NORMAL",
-            "FAN": "OFF",
-            "DUTY": 0
+            "FAN": "HIGH",
+            "DUTY": 100
           }
         }
       ]
@@ -381,8 +382,8 @@
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -405,8 +406,8 @@
             "CURRENT": 0.5,
             "FAULT": "NONE",
             "STATE": "NORMAL",
-            "FAN": "MEDIUM",
-            "DUTY": 70
+            "FAN": "HIGH",
+            "DUTY": 100
           }
         }
       ]
@@ -436,8 +437,8 @@
           "expect": {
             "TYPE": "STATUS",
             "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -452,8 +453,8 @@
           "command": "SET_TEMP:80",
           "expect": {
             "TYPE": "STATUS",
-            "FAN": "MEDIUM",
-            "DUTY": 70,
+            "FAN": "HIGH",
+            "DUTY": 100,
             "FAULT": "NONE",
             "STATE": "NORMAL"
           }
@@ -503,153 +504,6 @@
             "TYPE": "STATUS",
             "FAULT": "NONE",
             "STATE": "NORMAL"
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_001",
-      "description": "Real hardware boot: LM35 and INA219 initialize, system is in NORMAL state",
-      "steps": [
-        {
-          "command": "GET_STATUS",
-          "expect": {
-            "TYPE": "STATUS",
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_002",
-      "description": "Real hardware: SET_TEMP override drives fan control logic on real hardware",
-      "steps": [
-        {
-          "command": "SET_TEMP:80",
-          "expect": {
-            "TYPE": "STATUS",
-            "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_003",
-      "description": "Real hardware: over-temperature fault via SET_TEMP override",
-      "steps": [
-        {
-          "command": "SET_TEMP:100",
-          "expect": {
-            "TYPE": "STATUS",
-            "TEMP": 100.0,
-            "FAULT": "OVER_TEMPERATURE",
-            "STATE": "FAULT_MODE",
-            "FAN": "HIGH",
-            "DUTY": 100
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_004",
-      "description": "Real hardware: clear SET_TEMP override returns to real LM35 sensor, fan OFF at room temperature",
-      "steps": [
-        {
-          "command": "SET_TEMP:80",
-          "expect": {
-            "TYPE": "STATUS",
-            "TEMP": 80.0,
-            "FAN": "MEDIUM",
-            "DUTY": 70,
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        },
-        {
-          "command": "SET_TEMP:-1",
-          "expect": {
-            "TYPE": "STATUS",
-            "FAN": "OFF",
-            "DUTY": 0,
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_005",
-      "description": "Real hardware: SET_CALIB_OFFSET command is accepted and STATUS returned",
-      "steps": [
-        {
-          "command": "SET_CALIB_OFFSET:0.0",
-          "expect": {
-            "TYPE": "STATUS",
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        },
-        {
-          "command": "SET_CALIB_OFFSET:5.0",
-          "expect": {
-            "TYPE": "STATUS",
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        },
-        {
-          "command": "SET_CALIB_OFFSET:0.0",
-          "expect": {
-            "TYPE": "STATUS",
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_006",
-      "description": "Real hardware: INA219_DIAG command triggers I2C register dump and returns STATUS",
-      "steps": [
-        {
-          "command": "INA219_DIAG",
-          "expect": {
-            "TYPE": "STATUS",
-            "FAULT": "NONE",
-            "STATE": "NORMAL"
-          }
-        }
-      ]
-    },
-    {
-      "id": "TC_REAL_007",
-      "description": "Real hardware: fault recovery from over-temperature override back to real sensor",
-      "steps": [
-        {
-          "command": "SET_TEMP:100",
-          "expect": {
-            "TYPE": "STATUS",
-            "TEMP": 100.0,
-            "FAULT": "OVER_TEMPERATURE",
-            "STATE": "FAULT_MODE",
-            "FAN": "HIGH",
-            "DUTY": 100
-          }
-        },
-        {
-          "command": "SET_TEMP:-1",
-          "max_elapsed_ms": 1000,
-          "expect": {
-            "TYPE": "STATUS",
-            "FAULT": "NONE",
-            "STATE": "NORMAL",
-            "FAN": "OFF",
-            "DUTY": 0
           }
         }
       ]

@@ -32,6 +32,7 @@ static_analysis/*.txt
 .idea/
 .DS_Store
 Thumbs.db
+nul
 
 # Logs and temporary files
 *.log
@@ -39,3 +40,4 @@ Thumbs.db
 *.bak
 opencode.json
 AGENTS.md
+.opencode/

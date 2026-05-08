@@ -12,7 +12,8 @@ from report_generator import summarize_results, write_csv_report
 from serial_client import ProtocolResponse, SerialClient
 
 
-DEFAULT_CASES = Path(__file__).with_name("test_cases.json")
+DEFAULT_CASES_SIM = Path(__file__).with_name("test_cases_simulation.json")
+DEFAULT_CASES_REAL = Path(__file__).with_name("test_cases_real.json")
 DEFAULT_REPORT_DIR = Path(__file__).with_name("reports")
 
 
@@ -26,7 +27,11 @@ def values_match(actual: str | None, expected: Any) -> bool:
         return False
 
     if isinstance(expected, bool):
-        return actual in {"1", "true", "TRUE"} if expected else actual in {"0", "false", "FALSE"}
+        return (
+            actual in {"1", "true", "TRUE"}
+            if expected
+            else actual in {"0", "false", "FALSE"}
+        )
 
     if isinstance(expected, int):
         try:
@@ -43,13 +48,17 @@ def values_match(actual: str | None, expected: Any) -> bool:
     return actual == str(expected)
 
 
-def compare_response(response: ProtocolResponse, expected: dict[str, Any]) -> tuple[bool, str]:
+def compare_response(
+    response: ProtocolResponse, expected: dict[str, Any]
+) -> tuple[bool, str]:
     mismatches: list[str] = []
 
     for key, expected_value in expected.items():
         actual_value = response.fields.get(key)
         if not values_match(actual_value, expected_value):
-            mismatches.append(f"{key}: expected {expected_value!r}, got {actual_value!r}")
+            mismatches.append(
+                f"{key}: expected {expected_value!r}, got {actual_value!r}"
+            )
 
     if mismatches:
         return False, "; ".join(mismatches)
@@ -62,10 +71,16 @@ def compare_timing(elapsed_ms: float, step: dict[str, Any]) -> tuple[bool, str]:
     max_elapsed_ms = step.get("max_elapsed_ms")
 
     if min_elapsed_ms is not None and elapsed_ms < float(min_elapsed_ms):
-        return False, f"elapsed_ms: expected >= {float(min_elapsed_ms):.1f}, got {elapsed_ms:.1f}"
+        return (
+            False,
+            f"elapsed_ms: expected >= {float(min_elapsed_ms):.1f}, got {elapsed_ms:.1f}",
+        )
 
     if max_elapsed_ms is not None and elapsed_ms > float(max_elapsed_ms):
-        return False, f"elapsed_ms: expected <= {float(max_elapsed_ms):.1f}, got {elapsed_ms:.1f}"
+        return (
+            False,
+            f"elapsed_ms: expected <= {float(max_elapsed_ms):.1f}, got {elapsed_ms:.1f}",
+        )
 
     return True, "OK"
 
@@ -82,7 +97,9 @@ def format_expected(step: dict[str, Any]) -> str:
     return json.dumps(expected, sort_keys=True)
 
 
-def send_setup_commands(client: SerialClient, commands: list[str], timeout_s: float) -> None:
+def send_setup_commands(
+    client: SerialClient, commands: list[str], timeout_s: float
+) -> None:
     for command in commands:
         client.send_command(command, timeout_s)
 
@@ -121,7 +138,14 @@ def run_step(
         fields_passed, fields_message = compare_response(response, expected)
         timing_passed, timing_message = compare_timing(elapsed_ms, step)
         passed = fields_passed and timing_passed
-        message = "; ".join(message for message in (fields_message, timing_message) if message != "OK") or "OK"
+        message = (
+            "; ".join(
+                message
+                for message in (fields_message, timing_message)
+                if message != "OK"
+            )
+            or "OK"
+        )
         actual = response.line
     except Exception as exc:  # noqa: BLE001 - report serial/test failures in CSV
         passed = False
@@ -142,11 +166,16 @@ def run_step(
 
 
 def run_tests(args: argparse.Namespace) -> int:
-    test_plan = load_test_plan(args.cases)
+    cases_path = args.cases
+    if cases_path is None:
+        cases_path = DEFAULT_CASES_SIM if args.mode == "sim" else DEFAULT_CASES_REAL
+
+    test_plan = load_test_plan(cases_path)
     config = test_plan.get("config", {})
     baud_rate = args.baud_rate or int(config.get("baud_rate", 115200))
     response_timeout_s = float(config.get("response_timeout_s", 5.0))
     startup_delay_s = float(config.get("startup_delay_s", 2.0))
+    setup_delay_ms = int(config.get("setup_delay_ms", 0))
 
     results: list[dict[str, Any]] = []
 
@@ -158,20 +187,32 @@ def run_tests(args: argparse.Namespace) -> int:
     ) as client:
         for test_case in test_plan["test_cases"]:
             if not args.no_setup:
-                send_setup_commands(client, test_plan.get("setup_commands", []), response_timeout_s)
+                send_setup_commands(
+                    client, test_plan.get("setup_commands", []), response_timeout_s
+                )
+                if setup_delay_ms > 0:
+                    time.sleep(setup_delay_ms / 1000.0)
 
             for index, step in enumerate(test_case["steps"], start=1):
                 result = run_step(client, test_case, step, index, response_timeout_s)
                 results.append(result)
                 status = "PASS" if result["passed"] else "FAIL"
-                print(f"[{status}] {result['test_id']} step {index}: {result['command']}")
+                print(
+                    f"[{status}] {result['test_id']} step {index}: {result['command']}"
+                )
                 if not result["passed"]:
                     print(f"       {result['message']}")
 
         if not args.no_cleanup:
-            send_setup_commands(client, test_plan.get("cleanup_commands", []), response_timeout_s)
+            send_setup_commands(
+                client, test_plan.get("cleanup_commands", []), response_timeout_s
+            )
 
-    report_path = args.report or DEFAULT_REPORT_DIR / f"test_report_{datetime.now():%Y%m%d_%H%M%S}.csv"
+    report_path = (
+        args.report
+        or DEFAULT_REPORT_DIR
+        / f"test_report_{args.mode}_{datetime.now():%Y%m%d_%H%M%S}.csv"
+    )
     write_csv_report(report_path, results)
 
     passed, total = summarize_results(results)
@@ -182,13 +223,38 @@ def run_tests(args: argparse.Namespace) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run ECU fan-control UART integration tests")
-    parser.add_argument("--port", required=True, help="Serial port, e.g. COM8 or /dev/ttyUSB0")
-    parser.add_argument("--baud-rate", type=int, default=None, help="Serial baud rate override")
-    parser.add_argument("--cases", type=Path, default=DEFAULT_CASES, help="Path to test_cases.json")
-    parser.add_argument("--report", type=Path, default=None, help="Output CSV report path")
-    parser.add_argument("--no-setup", action="store_true", help="Skip setup commands before each test")
-    parser.add_argument("--no-cleanup", action="store_true", help="Skip cleanup commands after all tests")
+    parser = argparse.ArgumentParser(
+        description="Run ECU fan-control UART integration tests"
+    )
+    parser.add_argument(
+        "--port", required=True, help="Serial port, e.g. COM8 or /dev/ttyUSB0"
+    )
+    parser.add_argument(
+        "--baud-rate", type=int, default=None, help="Serial baud rate override"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["sim", "real"],
+        default="sim",
+        help="Test mode: 'sim' for simulation, 'real' for real hardware (default: sim)",
+    )
+    parser.add_argument(
+        "--cases",
+        type=Path,
+        default=None,
+        help="Path to test_cases JSON (overrides --mode default)",
+    )
+    parser.add_argument(
+        "--report", type=Path, default=None, help="Output CSV report path"
+    )
+    parser.add_argument(
+        "--no-setup", action="store_true", help="Skip setup commands before each test"
+    )
+    parser.add_argument(
+        "--no-cleanup",
+        action="store_true",
+        help="Skip cleanup commands after all tests",
+    )
     return parser.parse_args()
 
 
