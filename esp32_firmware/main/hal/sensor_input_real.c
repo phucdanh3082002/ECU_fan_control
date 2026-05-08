@@ -41,6 +41,7 @@ static bool s_i2cInitialized;
 static bool s_readError;
 static float s_lastTemperatureC;
 static float s_lastCurrentA;
+static int s_lastAdcRaw;
 
 static esp_err_t ina219_write_register(uint8_t reg, uint16_t value)
 {
@@ -146,6 +147,7 @@ static float real_read_temperature(void)
         return s_lastTemperatureC;
     }
 
+    s_lastAdcRaw = adc_raw;
     const float voltage_v = ((float)adc_raw * LM35_ADC_REF_VOLTAGE_V) / LM35_ADC_RAW_MAX;
     s_lastTemperatureC = voltage_v / LM35_VOLTS_PER_DEGREE_C;
     return s_lastTemperatureC;
@@ -198,6 +200,7 @@ esp_err_t sensor_input_real_init(void)
     s_readError = false;
     s_lastTemperatureC = 0.0f;
     s_lastCurrentA = 0.0f;
+    s_lastAdcRaw = 0;
 
     esp_err_t err = configure_lm35_adc();
     if (err != ESP_OK) {
@@ -218,4 +221,9 @@ esp_err_t sensor_input_real_init(void)
 const SensorInputHal *sensor_input_real_get_hal(void)
 {
     return &s_sensorInputRealHal;
+}
+
+int sensor_input_real_get_adc_raw(void)
+{
+    return s_lastAdcRaw;
 }

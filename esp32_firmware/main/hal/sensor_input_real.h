@@ -6,5 +6,6 @@
 
 esp_err_t sensor_input_real_init(void);
 const SensorInputHal *sensor_input_real_get_hal(void);
+int sensor_input_real_get_adc_raw(void);
 
 #endif

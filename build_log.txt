@@ -1,0 +1,8 @@
+﻿python : MSys/Mingw is no longer supported. Please follow the getting started guide of the documentation in order to 
+set up a suitiable environment, or continue at your own risk.
+At line:1 char:135
++ ... _firmware'; python 'C:\esp\v6.0\esp-idf\tools\idf.py' build 2>&1 | Ou ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (MSys/Mingw is n... your own risk.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

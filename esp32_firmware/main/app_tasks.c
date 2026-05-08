@@ -107,6 +107,9 @@ static int g_potPercent;
 static bool g_buttonPressed;
 static bool g_clearFaultRequested;
 
+static float s_tempOverrideValue = 0.0f;
+static bool s_tempOverrideActive = false;
+
 #if ECU_SENSOR_HAL_SIM
 static int clamp_adc_raw(int raw)
 {
@@ -296,7 +299,14 @@ static void apply_uart_command(const UartCommand *command)
         sensor_input_sim_set_use_adc_input(false);
         ESP_LOGI(TAG, "UART: SET_TEMP=%.1f, ADC disabled", command->floatValue);
 #else
-        ESP_LOGW(TAG, "UART: SET_TEMP ignored in real sensor HAL");
+        if (command->floatValue <= 0.0f) {
+            s_tempOverrideActive = false;
+            ESP_LOGI(TAG, "UART: SET_TEMP override cleared, back to real sensor");
+        } else {
+            s_tempOverrideValue = command->floatValue;
+            s_tempOverrideActive = true;
+            ESP_LOGI(TAG, "UART: SET_TEMP override=%.1f (real mode test)", command->floatValue);
+        }
 #endif
         break;
     case UART_CMD_SET_CURRENT:
@@ -421,6 +431,10 @@ static void sensor_read_task(void *parameter)
 
         lock_system_state();
         g_sensorInput = input;
+        g_adcRaw = sensor_input_real_get_adc_raw();
+        if (s_tempOverrideActive) {
+            g_sensorInput.temperature = s_tempOverrideValue;
+        }
         unlock_system_state();
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(SENSOR_READ_PERIOD_MS));
@@ -609,7 +623,10 @@ void app_tasks_start(void)
     sensor_input_sim_init();
     s_sensorInputHal = sensor_input_sim_get_hal();
 #elif ECU_SENSOR_HAL_REAL
-    ESP_ERROR_CHECK(sensor_input_real_init());
+    esp_err_t err = sensor_input_real_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init real sensors. Firmware will continue but sensors may report errors.");
+    }
     s_sensorInputHal = sensor_input_real_get_hal();
 #endif
     g_sensorInput = read_sensor_input_from_hal();

@@ -1,6 +1,5 @@
-if(NOT DEFINED ECU_SENSOR_HAL)
-    set(ECU_SENSOR_HAL "SIM")
-endif()
+# Force REAL HAL mode for hardware validation
+set(ECU_SENSOR_HAL "REAL")
 
 set(SENSOR_INPUT_HAL_SRCS "")
 set(SENSOR_INPUT_HAL_DEFS "")
