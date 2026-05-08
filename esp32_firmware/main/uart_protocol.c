@@ -179,6 +179,15 @@ bool uart_protocol_parse_command(char *line, UartCommand *command, char *error, 
         return true;
     }
 
+    if (parse_prefixed_float(trimmed, "SET_CALIB_OFFSET:", UART_CMD_SET_CALIB_OFFSET, command)) {
+        return true;
+    }
+
+    if (strcmp(trimmed, "INA219_DIAG") == 0) {
+        command->type = UART_CMD_INA219_DIAG;
+        return true;
+    }
+
     set_error(error, errorSize, "UNKNOWN_OR_INVALID_COMMAND");
     return false;
 }
@@ -187,7 +196,7 @@ void uart_protocol_format_status(char *buffer, size_t bufferSize, const SensorIn
 {
     snprintf(buffer,
              bufferSize,
-             "STATUS,TEMP=%.1f,CURRENT=%.1f,RPM=%d,FAN=%s,DUTY=%d,FAULT=%s,STATE=%s",
+             "STATUS,TEMP=%.1f,CURRENT=%.4f,RPM=%d,FAN=%s,DUTY=%d,FAULT=%s,STATE=%s",
              input->temperature,
              input->current,
              input->rpm,

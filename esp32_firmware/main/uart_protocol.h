@@ -14,6 +14,8 @@ typedef enum {
     UART_CMD_USE_ADC_INPUT,
     UART_CMD_CLEAR_FAULT,
     UART_CMD_GET_STATUS,
+    UART_CMD_SET_CALIB_OFFSET,
+    UART_CMD_INA219_DIAG,
 } UartCommandType;
 
 typedef struct {

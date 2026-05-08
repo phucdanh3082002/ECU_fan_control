@@ -348,6 +348,14 @@ static void apply_uart_command(const UartCommand *command)
     case UART_CMD_GET_STATUS:
         ESP_LOGI(TAG, "UART: GET_STATUS");
         break;
+    case UART_CMD_SET_CALIB_OFFSET:
+        sensor_input_real_set_calibration_offset(command->floatValue);
+        ESP_LOGI(TAG, "UART: SET_CALIB_OFFSET=%.1f", command->floatValue);
+        break;
+    case UART_CMD_INA219_DIAG:
+        sensor_input_real_ina219_diagnostic();
+        ESP_LOGI(TAG, "UART: INA219_DIAG executed");
+        break;
     default:
         break;
     }
@@ -537,7 +545,7 @@ static void status_report_task(void *parameter)
         unlock_system_state();
 
         ESP_LOGI(TAG,
-                 "STATUS,TEMP=%.1f,CURRENT=%.1f,RPM=%d,SENSOR=%d,FAN=%s,DUTY=%d,FAULT=%s,STATE=%s,ADC_RAW=%d,POT=%d%%,BUTTON=%s",
+                 "STATUS,TEMP=%.1f,CURRENT=%.4f,RPM=%d,SENSOR=%d,FAN=%s,DUTY=%d,FAULT=%s,STATE=%s,ADC_RAW=%d,POT=%d%%,BUTTON=%s",
                  input.temperature,
                  input.current,
                  input.rpm,
